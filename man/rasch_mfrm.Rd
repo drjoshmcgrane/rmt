@@ -13,7 +13,9 @@ rasch_mfrm(
   n_groups = 10,
   adjust_N = NA,
   na_codes = -1,
-  interaction = NULL
+  interaction = NULL,
+  maxit = 60,
+  tol = 1e-08
 )
 }
 \arguments{
@@ -41,6 +43,8 @@ negative score is also treated as missing.}
 \code{gamma[item, level]} with double sum-to-zero constraints on top of
 the additive severities, so each level may be more or less severe on
 particular items; estimates are returned in \code{interaction_effects}.}
+
+\item{maxit, tol}{Newton-Raphson iteration cap and convergence tolerance.}
 }
 \value{
 An object of classes \code{"rasch_mfrm"} and \code{"rasch"}. In

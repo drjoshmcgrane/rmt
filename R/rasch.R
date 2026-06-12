@@ -89,6 +89,8 @@
 #' @param na_codes Values to read as missing. Defaults to \code{-1}, the
 #'   conventional missing-response code; any negative score is also treated as
 #'   missing, since valid category scores start at zero.
+#' @param maxit,tol Newton-Raphson iteration cap and convergence
+#'   tolerance of the pairwise conditional estimation.
 #' @param key Optional multiple-choice scoring key: a named vector mapping
 #'   item names to the correct response, or a data frame with columns
 #'   \code{item} and \code{key}. Keyed items are scored 0/1 against the key
@@ -112,7 +114,7 @@
 #' @export
 rasch <- function(data, model = c("PCM", "RSM"), id = NULL, factors = NULL,
                   items = NULL, n_groups = 10, adjust_N = NA, anchors = NULL,
-                  na_codes = -1, key = NULL) {
+                  na_codes = -1, key = NULL, maxit = 60, tol = 1e-8) {
   model <- match.arg(model)
 
   # --- split data frame into ID, factors, and item columns ---------------
@@ -172,7 +174,7 @@ rasch <- function(data, model = c("PCM", "RSM"), id = NULL, factors = NULL,
   }
 
   # --- item estimation ----------------------------------------------------
-  est <- pcml(X, model = model, anchors = anchors)
+  est <- pcml(X, model = model, anchors = anchors, maxit = maxit, tol = tol)
   fit <- .assemble_fit(model, X, est, id_vec, fac_df, n_groups, adjust_N,
                        prep$notes)
   fit$mc <- mc

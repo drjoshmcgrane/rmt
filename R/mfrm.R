@@ -65,6 +65,7 @@
 #'   \code{gamma[item, level]} with double sum-to-zero constraints on top of
 #'   the additive severities, so each level may be more or less severe on
 #'   particular items; estimates are returned in \code{interaction_effects}.
+#' @param maxit,tol Newton-Raphson iteration cap and convergence tolerance.
 #' @return An object of classes \code{"rasch_mfrm"} and \code{"rasch"}. In
 #'   addition to every component of a \code{\link{rasch}} fit (computed over
 #'   the virtual items), it carries \code{facet_effects} (per facet: level,
@@ -88,7 +89,8 @@
 #' fit$facet_effects$rater
 #' @export
 rasch_mfrm <- function(data, person, item, score, facets, n_groups = 10,
-                       adjust_N = NA, na_codes = -1, interaction = NULL) {
+                       adjust_N = NA, na_codes = -1, interaction = NULL,
+                       maxit = 60, tol = 1e-8) {
   if (!is.null(interaction)) {
     interaction <- as.character(interaction)[1]
     if (!interaction %in% facets)
@@ -188,7 +190,7 @@ rasch_mfrm <- function(data, person, item, score, facets, n_groups = 10,
   }
 
   # concave likelihood: Newton-Raphson from zero with step halving
-  sol <- .pcml_solve(Xv, thr_v, m_v, B, rep(0, P))
+  sol <- .pcml_solve(Xv, thr_v, m_v, B, rep(0, P), maxit = maxit, tol = tol)
 
   thr_v$tau <- sol$tau; thr_v$se <- sol$se_tau; thr_v$anchored <- FALSE
   est <- list(model = "MFRM", thr = thr_v, cov_tau = sol$cov_tau,

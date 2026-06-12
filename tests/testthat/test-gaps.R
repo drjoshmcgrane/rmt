@@ -253,3 +253,17 @@ test_that("compare_fits contrasts nested models on the same data", {
   expect_true(all(is.finite(cmp2$chisq_per_df)))
   expect_error(compare_fits(pcm), "at least two")
 })
+
+test_that("maxit and tol are honoured by the estimators", {
+  set.seed(4); Np <- 400; L <- 8
+  d <- seq(-1.5, 1.5, length.out = L)
+  X <- matrix(rbinom(Np * L, 1, plogis(outer(rnorm(Np), d, "-"))), Np, L)
+  colnames(X) <- sprintf("I%02d", 1:L)
+  # a very loose tolerance stops after the first step
+  f_loose <- rasch(X, maxit = 60, tol = 10)
+  expect_lte(f_loose$est$iterations, 2)
+  # tight settings converge as usual and agree with defaults
+  f_tight <- rasch(X, maxit = 200, tol = 1e-10)
+  f_def <- rasch(X)
+  expect_equal(f_tight$items$location, f_def$items$location, tolerance = 1e-6)
+})

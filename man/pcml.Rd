@@ -4,7 +4,7 @@
 \alias{pcml}
 \title{Estimate Rasch thresholds by pairwise conditional maximum likelihood}
 \usage{
-pcml(X, model = c("PCM", "RSM"), anchors = NULL)
+pcml(X, model = c("PCM", "RSM"), anchors = NULL, maxit = 60, tol = 1e-08)
 }
 \arguments{
 \item{X}{Persons-by-items integer score matrix (categories from 0). Missing
@@ -19,6 +19,8 @@ columns \code{item} (name or column index), \code{k}, and \code{tau}
 \code{tau} while its thresholds remain free (average anchoring). The
 remaining parameters are estimated on the anchored scale and no
 recentring is applied. PCM only.}
+
+\item{maxit, tol}{Newton-Raphson iteration cap and convergence tolerance.}
 }
 \value{
 A list with the threshold table \code{thr} (columns \code{id},

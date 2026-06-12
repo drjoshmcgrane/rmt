@@ -201,12 +201,14 @@ ui <- page_navbar(
           hr(),
           fileInput("key_file", "Multiple-choice key (CSV: item,key)",
                     accept = ".csv", placeholder = "optional"),
-          fileInput("anchor_file", "Anchors for equating (CSV: item,k,tau; blank k = anchor the item mean)",
+          fileInput("anchor_file", "Anchors for equating (CSV: item,k,tau)",
                     accept = ".csv", placeholder = "optional"),
-          downloadButton("dl_anchors", "Save anchors from this analysis (CSV)",
-                         class = "btn-outline-secondary w-100 btn-sm"),
+          radioButtons("anchor_type", "Anchor as",
+                       c("Individual thresholds" = "individual",
+                         "Average item locations" = "average"),
+                       inline = TRUE),
           p(class = "text-muted small mt-1",
-            "Saved anchors match by item name when uploaded to a later analysis; rows for items not present are ignored.")
+            "Anchors match by item name; rows for items not present are ignored. Individual anchoring fixes each listed threshold; average anchoring fixes each item's mean location (thresholds stay free). Save an anchor file from the Items page of a previous analysis.")
         ),
         conditionalPanel("input.model_type == 'efrm'",
           h6("Column roles"),
@@ -233,6 +235,10 @@ ui <- page_navbar(
             "Each item x facet combination is calibrated jointly; facet severities are reported with SEs and fit. An interaction lets one facet be more or less severe on particular items.")
         ),
         sliderInput("ng", "Class intervals", min = 2, max = 16, value = 8),
+        h6("Estimation"),
+        numericInput("maxit", "Maximum iterations", value = 60, min = 5, step = 5),
+        numericInput("tol", "Convergence criterion", value = 1e-8,
+                     min = 1e-12, step = 1e-8),
         actionButton("run", "Run analysis", class = "btn-primary w-100 btn-lg mt-2"),
         p(class = "text-muted small mt-3",
           "Estimation: pairwise conditional maximum likelihood (Andrich & Luo 2003).",
@@ -259,10 +265,12 @@ ui <- page_navbar(
 
   # ---------------------------------------------------------------- ITEMS --
   nav_panel("Items",
-    div(class = "mb-2",
+    div(class = "mb-2 d-flex align-items-end gap-3 flex-wrap",
         numericInput("adjN",
                      "Adjust the item-trait chi-square to a reference sample size (blank = off)",
-                     value = NA, min = 50, width = "420px")),
+                     value = NA, min = 50, width = "420px"),
+        downloadButton("dl_anchors", "Save anchors (CSV: item,k,tau)",
+                       class = "btn-outline-secondary mb-3")),
     tableCard("items_tbl", "Item statistics",
               "Click a row to inspect that item's curves below. Location and SE from the pairwise conditional likelihood; fit residual ~ N(0,1) under fit; item-trait chi-square over class intervals; misfit flag uses BH-adjusted probabilities."),
     layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
@@ -596,7 +604,9 @@ server <- function(input, output, session) {
                      id = if (!is.null(input$ef_id) && input$ef_id != NONE)
                        input$ef_id else NULL,
                      items = names(ef_setmap()),
-                     n_groups = input$ng, adjust_N = adjN)
+                     n_groups = input$ng, adjust_N = adjN,
+                     maxit = max(5, input$maxit %||% 60),
+                     tol = max(1e-12, input$tol %||% 1e-8))
         } else if (identical(input$model_type, "mfrm")) {
           if (any(c(input$lp_person, input$lp_item, input$lp_score) == NONE) ||
               !length(input$lp_facets))
@@ -606,7 +616,9 @@ server <- function(input, output, session) {
                      n_groups = input$ng, adjust_N = adjN,
                      interaction = if (!is.null(input$lp_interaction) &&
                                        input$lp_interaction != NONE)
-                       input$lp_interaction else NULL)
+                       input$lp_interaction else NULL,
+                     maxit = max(5, input$maxit %||% 60),
+                     tol = max(1e-12, input$tol %||% 1e-8))
         } else {
           idc <- if (!is.null(input$id_col) && input$id_col != NONE) input$id_col else NULL
           fac <- if (length(input$factor_cols)) input$factor_cols else NULL
@@ -634,11 +646,18 @@ server <- function(input, output, session) {
                                        sum(!present)), type = "warning")
             anc <- anc[present, , drop = FALSE]
             if (!nrow(anc)) anc <- NULL
+            # average anchoring: collapse to one mean-location anchor per item
+            if (!is.null(anc) && identical(input$anchor_type, "average")) {
+              mu <- tapply(anc$tau, as.character(anc$item), mean)
+              anc <- data.frame(item = names(mu), k = NA, tau = as.numeric(mu))
+            }
           }
           f0 <- rasch(df, model = if (identical(input$model_type, "rsm")) "RSM" else "PCM",
                       id = idc, factors = fac, items = its,
                       n_groups = input$ng, adjust_N = adjN, anchors = anc,
-                      key = mc_key)
+                      key = mc_key,
+                      maxit = max(5, input$maxit %||% 60),
+                      tol = max(1e-12, input$tol %||% 1e-8))
           if (identical(input$model_type, "dich") && any(f0$m > 1L))
             showNotification("Some items have more than two categories; they were fitted with partial credit thresholds.",
                              type = "warning", duration = 10)

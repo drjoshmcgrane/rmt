@@ -210,6 +210,7 @@ threshold_index <- function(m) {
 #'   \code{tau} while its thresholds remain free (average anchoring). The
 #'   remaining parameters are estimated on the anchored scale and no
 #'   recentring is applied. PCM only.
+#' @param maxit,tol Newton-Raphson iteration cap and convergence tolerance.
 #' @return A list with the threshold table \code{thr} (columns \code{id},
 #'   \code{item}, \code{k}, \code{tau}, \code{se}, \code{anchored}), the
 #'   threshold covariance matrix \code{cov_tau}, the pairwise conditional
@@ -224,7 +225,8 @@ threshold_index <- function(m) {
 #' # anchor two items at fixed values (equating)
 #' pcml(X, anchors = data.frame(item = c("I1", "I6"), k = 1, tau = c(-1.5, 1.5)))$thr
 #' @export
-pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL) {
+pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL,
+                 maxit = 60, tol = 1e-8) {
   model <- match.arg(model)
   X <- as.matrix(X); storage.mode(X) <- "integer"
   m <- apply(X, 2, max, na.rm = TRUE); L <- ncol(X)
@@ -284,7 +286,8 @@ pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL) {
     B <- do.call(cbind, lapply(blocks, `[[`, "B"))
     beta0 <- unlist(lapply(blocks, `[[`, "beta0"), use.names = FALSE)
 
-    sol <- .pcml_solve(X, thr, m, B, beta0, offset = offset)
+    sol <- .pcml_solve(X, thr, m, B, beta0, offset = offset,
+                       maxit = maxit, tol = tol)
     thr$tau <- sol$tau; thr$se <- sol$se_tau; thr$se[a_id] <- 0
     thr$anchored <- seq_len(M) %in% a_id | thr$item %in% mean_items
     return(list(model = model, thr = thr, cov_tau = sol$cov_tau,
@@ -320,7 +323,7 @@ pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL) {
     beta0 <- st[-M] - mean(st)
   }
 
-  sol <- .pcml_solve(X, thr, m, B, beta0)
+  sol <- .pcml_solve(X, thr, m, B, beta0, maxit = maxit, tol = tol)
   # recentre so the mean item location is zero
   loc <- vapply(seq_len(L), function(i) mean(sol$tau[thr$item == i]), 0)
   sol$tau <- sol$tau - mean(loc)

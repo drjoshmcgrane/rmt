@@ -14,7 +14,9 @@ rasch(
   adjust_N = NA,
   anchors = NULL,
   na_codes = -1,
-  key = NULL
+  key = NULL,
+  maxit = 60,
+  tol = 1e-08
 )
 }
 \arguments{
@@ -56,6 +58,9 @@ item names to the correct response, or a data frame with columns
 (case-insensitive after trimming; blanks become missing) and the raw
 responses are retained in \code{fit$mc} for
 \code{\link{distractor_analysis}} and \code{\link{plot_distractors}}.}
+
+\item{maxit, tol}{Newton-Raphson iteration cap and convergence
+tolerance of the pairwise conditional estimation.}
 }
 \value{
 An object of class \code{"rasch"}: a list with the item summary

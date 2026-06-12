@@ -349,6 +349,23 @@
 #' proportionally sharper category distinctions; frame-level fit and the
 #' per-frame category curves are where a violation of this would appear.
 #'
+#' Estimation order: the within-frame pairwise stage establishes the
+#' centred set thresholds and the person-group units \code{phi}; the
+#' person-side linking stage then establishes the item-set units
+#' \code{alpha} and set locations. The reported item parameters and all
+#' person measures are computed only after every unit is established: item
+#' thresholds are mapped into the common arbitrary unit using \code{alpha}
+#' and the set locations, and person measures are weighted-score weighted
+#' likelihood estimates evaluated under the final units
+#' \code{rho = alpha * phi}. The per-frame person estimates used inside the
+#' linking stage are interim quantities for the unit ratios only and are
+#' discarded. The within-frame stage needs no re-estimation once
+#' \code{alpha} is known, because the pairwise likelihood is invariant to
+#' the within-set rescaling that \code{alpha} represents; threshold
+#' standard errors are conditional on the estimated units, whose own
+#' uncertainty is reported separately in \code{alpha_table} and
+#' \code{phi_table}.
+#'
 #' @param data Persons-by-items data (matrix or data frame, like
 #'   \code{\link{rasch}}), plus a person-group column.
 #' @param item_sets A named list mapping set names to item-column names, or
