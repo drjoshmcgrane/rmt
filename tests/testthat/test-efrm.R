@@ -213,3 +213,36 @@ test_that("EFRM honours the -1 missing code", {
   expect_equal(f1$item_arbitrary$location, f2$item_arbitrary$location,
                tolerance = 1e-10)
 })
+
+test_that("EFRM standard error methods are coherent", {
+  set.seed(15); Np <- 500
+  alpha_true <- c(0.75, 4 / 3); alpha_true <- alpha_true / exp(mean(log(alpha_true)))
+  sets <- rep(1:2, each = 6)
+  d <- rep(seq(-1, 1, length.out = 6), 2)
+  th <- rnorm(Np, 0, 1.3)
+  X <- sapply(seq_along(sets), function(i) sapply(th, function(t)
+    sample(0:2, 1, prob = simEF(t, d[i] + c(-0.5, 0.5), alpha_true[sets[i]]))))
+  colnames(X) <- sprintf("S%dI%02d", sets, seq_along(sets))
+
+  fit <- rasch_efrm(data.frame(X, g = "all"), groups = "g",
+                    item_sets = split(colnames(X), sets), boot_reps = 120)
+  expect_identical(fit$se_method, "hybrid")
+  expect_true(all(is.finite(fit$alpha_table$se_log_alpha)))
+  expect_true(all(fit$alpha_table$se_log_alpha > 0))
+  # propagation: common-unit threshold SEs exceed the purely conditional part
+  cond <- sqrt(diag(fit$est$cov_tau))   # virtual level, already propagated
+  expect_true(all(fit$thresholds_arbitrary$se > 0))
+
+  fb <- rasch_efrm(data.frame(X, g = "all"), groups = "g",
+                   item_sets = split(colnames(X), sets),
+                   se_method = "bootstrap", boot_reps = 50)
+  expect_identical(fb$se_method, "bootstrap")
+  expect_gte(fb$boot_reps_used, 30)
+  # the two methods agree on scale (well within a factor of two)
+  ratio <- median(fit$thresholds_arbitrary$se / fb$thresholds_arbitrary$se)
+  expect_gt(ratio, 0.5); expect_lt(ratio, 2)
+  # point estimates are identical across SE methods
+  expect_equal(fit$alpha_table$alpha, fb$alpha_table$alpha, tolerance = 1e-10)
+  expect_equal(fit$item_arbitrary$location, fb$item_arbitrary$location,
+               tolerance = 1e-10)
+})

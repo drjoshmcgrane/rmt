@@ -205,72 +205,90 @@
 }
 
 # Stage 2: alpha_s and set locations mu_s from persons common to set pairs,
-# with the error-variance correction and jackknife standard errors.
-.efrm_link_sets <- function(u_mat, se_mat, sets_u, min_link_persons) {
+# with the error-variance correction. Standard errors and the joint
+# covariance of (log alpha, mu) come from a person bootstrap of the whole
+# linking stage: each replicate resamples persons, recomputes the
+# error-corrected variance ratios and offsets per set pair, and re-solves
+# the linking least squares. This captures the nonlinearity of the
+# correction and the reconciliation over the linking graph, which a
+# leave-one-out jackknife of the raw log slope understates.
+.efrm_link_sets <- function(u_mat, se_mat, sets_u, min_link_persons,
+                            boot_reps = 300) {
   S <- ncol(u_mat)
-  edges <- list(); ls_est <- ls_var <- off_est <- off_n <- numeric(0)
-  for (a in seq_len(S - 1)) for (b in (a + 1):S) {
-    ok <- which(is.finite(u_mat[, a]) & is.finite(u_mat[, b]))
-    if (length(ok) < min_link_persons) next
-    u1 <- u_mat[ok, a]; u2 <- u_mat[ok, b]
-    s1 <- se_mat[ok, a]; s2 <- se_mat[ok, b]; n <- length(ok)
-    v1 <- var(u1) - mean(s1^2); v2 <- var(u2) - mean(s2^2)
-    if (!is.finite(v1) || !is.finite(v2) || v1 <= 0 || v2 <= 0)
-      stop("too little true person variance to link sets '", sets_u[a],
-           "' and '", sets_u[b], "'")
-    ls <- 0.5 * (log(v2) - log(v1))                  # log(alpha_b / alpha_a)
-    # leave-one-out jackknife of the log slope
-    S1 <- sum(u1); Q1 <- sum(u1^2); E1 <- sum(s1^2)
-    S2 <- sum(u2); Q2 <- sum(u2^2); E2 <- sum(s2^2)
-    lsi <- vapply(seq_len(n), function(j) {
-      n1 <- n - 1L
-      va <- (Q1 - u1[j]^2 - (S1 - u1[j])^2 / n1) / (n1 - 1L) - (E1 - s1[j]^2) / n1
-      vb <- (Q2 - u2[j]^2 - (S2 - u2[j])^2 / n1) / (n1 - 1L) - (E2 - s2[j]^2) / n1
-      if (va <= 0 || vb <= 0) return(NA_real_)
-      0.5 * (log(vb) - log(va))
-    }, 0)
-    lsi <- lsi[is.finite(lsi)]
-    jv <- if (length(lsi) > 2) (length(lsi) - 1) / length(lsi) *
-      sum((lsi - mean(lsi))^2) else 1
-    edges[[length(edges) + 1L]] <- c(a, b)
-    ls_est <- c(ls_est, ls); ls_var <- c(ls_var, max(jv, 1e-8))
-    off_est <- c(off_est, mean(u2) - exp(ls) * mean(u1))  # alpha_b (mu_a - mu_b)
-    off_n <- c(off_n, n)
-  }
-  if (!length(edges)) stop("no set pairs share enough persons to link the units")
-  comp <- .efrm_components(S, edges)
-  if (length(unique(comp)) > 1L)
-    stop("item sets are not linked by common persons; relative units (alpha) ",
-         "are unidentified between: ",
-         paste(tapply(sets_u, comp, paste, collapse = "+"), collapse = " | "))
-
-  # weighted least squares for log alpha (sum-zero) over the edge contrasts
   A <- rbind(diag(S - 1L), rep(-1, S - 1L))
-  C <- matrix(0, length(edges), S)
-  for (e in seq_along(edges)) { C[e, edges[[e]][2]] <- 1; C[e, edges[[e]][1]] <- -1 }
-  w <- 1 / ls_var; M <- C %*% A; sw <- sqrt(w)
-  la <- drop(A %*% qr.coef(qr(M * sw), ls_est * sw))
-  la[is.na(la)] <- 0
-  alpha <- exp(la)
-  # per-set se(log alpha) from the WLS covariance
-  XtX <- crossprod(M * sw)
-  cov_la <- A %*% tryCatch(solve(XtX), error = function(e)
-    solve(XtX + diag(1e-8, ncol(XtX)))) %*% t(A)
-  # set locations: mu_a - mu_b = off / alpha_b per edge; mean-zero constraint
-  dmu <- off_est / alpha[vapply(edges, `[`, 1L, 2)]
-  Cm <- matrix(0, length(edges), S)
-  for (e in seq_along(edges)) { Cm[e, edges[[e]][1]] <- 1; Cm[e, edges[[e]][2]] <- -1 }
-  Mm <- Cm %*% A; swm <- sqrt(off_n)
-  mu <- drop(A %*% qr.coef(qr(Mm * swm), dmu * swm))
-  mu[is.na(mu)] <- 0
 
-  list(alpha = setNames(alpha, sets_u),
-       se_log_alpha = setNames(sqrt(pmax(diag(cov_la), 0)), sets_u),
-       mu = setNames(mu, sets_u),
-       edges = data.frame(set_a = sets_u[vapply(edges, `[`, 1L, 1)],
-                          set_b = sets_u[vapply(edges, `[`, 1L, 2)],
-                          n = off_n, log_slope = ls_est,
-                          se = sqrt(ls_var)))
+  # one pass over a person index vector: per-edge corrected slopes and
+  # offsets, then the two weighted least-squares solves
+  link_once <- function(idx, hard = FALSE) {
+    edges <- list(); ls_est <- off_est <- off_n <- numeric(0)
+    for (a in seq_len(S - 1)) for (b in (a + 1):S) {
+      ok <- idx[is.finite(u_mat[idx, a]) & is.finite(u_mat[idx, b])]
+      if (length(ok) < min_link_persons) next
+      u1 <- u_mat[ok, a]; u2 <- u_mat[ok, b]
+      v1 <- var(u1) - mean(se_mat[ok, a]^2)
+      v2 <- var(u2) - mean(se_mat[ok, b]^2)
+      if (!is.finite(v1) || !is.finite(v2) || v1 <= 0 || v2 <= 0) {
+        if (hard)
+          stop("too little true person variance to link sets '", sets_u[a],
+               "' and '", sets_u[b], "'")
+        next
+      }
+      ls <- 0.5 * (log(v2) - log(v1))                # log(alpha_b / alpha_a)
+      edges[[length(edges) + 1L]] <- c(a, b)
+      ls_est <- c(ls_est, ls)
+      off_est <- c(off_est, mean(u2) - exp(ls) * mean(u1))  # alpha_b (mu_a - mu_b)
+      off_n <- c(off_n, length(ok))
+    }
+    if (!length(edges)) {
+      if (hard) stop("no set pairs share enough persons to link the units")
+      return(NULL)
+    }
+    comp <- .efrm_components(S, edges)
+    if (length(unique(comp)) > 1L) {
+      if (hard)
+        stop("item sets are not linked by common persons; relative units (alpha) ",
+             "are unidentified between: ",
+             paste(tapply(sets_u, comp, paste, collapse = "+"), collapse = " | "))
+      return(NULL)
+    }
+    C <- matrix(0, length(edges), S)
+    for (e in seq_along(edges)) { C[e, edges[[e]][2]] <- 1; C[e, edges[[e]][1]] <- -1 }
+    sw <- sqrt(off_n); M <- C %*% A
+    la <- drop(A %*% qr.coef(qr(M * sw), ls_est * sw)); la[is.na(la)] <- 0
+    alpha <- exp(la)
+    dmu <- off_est / alpha[vapply(edges, `[`, 1L, 2)]
+    Cm <- matrix(0, length(edges), S)
+    for (e in seq_along(edges)) { Cm[e, edges[[e]][1]] <- 1; Cm[e, edges[[e]][2]] <- -1 }
+    mu <- drop(A %*% qr.coef(qr((Cm %*% A) * sw), dmu * sw)); mu[is.na(mu)] <- 0
+    list(la = la, mu = mu, edges = edges, ls_est = ls_est, off_n = off_n)
+  }
+
+  N <- nrow(u_mat)
+  point <- link_once(seq_len(N), hard = TRUE)
+
+  # person bootstrap of the linking stage (skipped inside an outer bootstrap)
+  cov_link <- NULL
+  if (boot_reps > 0) {
+    reps <- matrix(NA_real_, boot_reps, 2L * S)
+    for (r in seq_len(boot_reps)) {
+      b <- link_once(sample.int(N, N, replace = TRUE))
+      if (!is.null(b)) reps[r, ] <- c(b$la, b$mu)
+    }
+    reps <- reps[stats::complete.cases(reps), , drop = FALSE]
+    if (nrow(reps) < 30)
+      stop("the unit-linking bootstrap failed in most replicates; the linking ",
+           "design is too weak for stable alpha estimation")
+    cov_link <- stats::cov(reps)
+  }
+
+  list(alpha = setNames(exp(point$la), sets_u),
+       se_log_alpha = if (is.null(cov_link)) setNames(rep(NA_real_, S), sets_u)
+         else setNames(sqrt(pmax(diag(cov_link)[seq_len(S)], 0)), sets_u),
+       mu = setNames(point$mu, sets_u),
+       cov_link = cov_link,
+       edges = data.frame(set_a = sets_u[vapply(point$edges, `[`, 1L, 1)],
+                          set_b = sets_u[vapply(point$edges, `[`, 1L, 2)],
+                          n = point$off_n, log_slope = point$ls_est))
 }
 
 # Person estimation under unequal frame units: the weighted score
@@ -361,10 +379,20 @@
 #' linking stage are interim quantities for the unit ratios only and are
 #' discarded. The within-frame stage needs no re-estimation once
 #' \code{alpha} is known, because the pairwise likelihood is invariant to
-#' the within-set rescaling that \code{alpha} represents; threshold
-#' standard errors are conditional on the estimated units, whose own
-#' uncertainty is reported separately in \code{alpha_table} and
-#' \code{phi_table}.
+#' the within-set rescaling that \code{alpha} represents; the units' own
+#' uncertainty is reported in \code{alpha_table} and \code{phi_table} and
+#' folded into the common-unit standard errors as described below.
+#'
+#' Standard errors: under \code{se_method = "hybrid"} (default) the group
+#' units carry sandwich standard errors from the pairwise stage, the set
+#' units carry person-bootstrap standard errors from the linking stage, and
+#' the unit uncertainty is propagated into the common-unit threshold and
+#' item standard errors by the delta method (treating the item-side and
+#' person-side information as independent). Under
+#' \code{se_method = "bootstrap"} all stages are re-estimated on
+#' \code{boot_reps} person resamples and every standard error and the
+#' threshold covariance come from the replicate spread; slower, but captures
+#' all cross-dependencies jointly.
 #'
 #' @param data Persons-by-items data (matrix or data frame, like
 #'   \code{\link{rasch}}), plus a person-group column.
@@ -379,6 +407,11 @@
 #'   bilinear pairwise stage.
 #' @param min_link_persons Minimum number of common persons required for a
 #'   set pair to contribute to the unit linking.
+#' @param se_method \code{"hybrid"} (sandwich + linking bootstrap + delta
+#'   propagation; fast, default) or \code{"bootstrap"} (full person
+#'   bootstrap of all stages).
+#' @param boot_reps Bootstrap replicates; defaults to 300 for the linking
+#'   bootstrap and 200 for the full bootstrap.
 #' @return An object of classes \code{"rasch_efrm"} and \code{"rasch"}. In
 #'   addition to the standard components (computed over item-by-group
 #'   virtual columns with the frame units carried in \code{disc}), it has
@@ -409,7 +442,11 @@
 rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
                        items = NULL, n_groups = 10, adjust_N = NA,
                        na_codes = -1, maxit = 50, tol = 1e-7,
-                       min_link_persons = 30) {
+                       min_link_persons = 30,
+                       se_method = c("hybrid", "bootstrap"),
+                       boot_reps = NULL) {
+  se_method <- match.arg(se_method)
+  if (is.null(boot_reps)) boot_reps <- if (se_method == "hybrid") 300L else 200L
   # --- roles ----------------------------------------------------------------
   id_vec <- NULL; fac_df <- NULL; grp <- NULL; grp_name <- "group"
   if (is.data.frame(data)) {
@@ -559,20 +596,78 @@ rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
       sel <- which(pe$n_items > 0 & !pe$extreme)
       u_mat[sel, si] <- pe$theta[sel]; se_mat[sel, si] <- pe$se[sel]
     }
-    link <- .efrm_link_sets(u_mat, se_mat, sets_u, min_link_persons)
+    link <- .efrm_link_sets(u_mat, se_mat, sets_u, min_link_persons,
+                            boot_reps = boot_reps)
     alpha <- link$alpha; mu <- link$mu
   } else {
     alpha <- setNames(1, sets_u); mu <- setNames(0, sets_u)
     link <- list(alpha = alpha, se_log_alpha = setNames(0, sets_u), mu = mu,
-                 edges = data.frame())
+                 cov_link = NULL, edges = data.frame())
+  }
+
+  # --- optional full person bootstrap of all stages ----------------------------
+  boot <- NULL
+  if (se_method == "bootstrap") {
+    Npers <- nrow(Xv)
+    boot_replicate <- function(idx) {
+      Xb <- Xv[idx, , drop = FALSE]
+      pb <- .efrm_filter_pairs(.pair_counts(Xb, m_v), vmap)
+      if (!length(pb)) return(NULL)
+      sb <- .efrm_solve(Xb, thr_v, m_v, vmap, pb, drow, A_D,
+                        maxit = maxit, tol = tol)
+      if (S > 1L) {
+        u_b <- se_b <- matrix(NA_real_, length(idx), S)
+        for (si in seq_len(S)) for (g in glevs) {
+          cols <- which(vmap$set == sets_u[si] & vmap$group == g)
+          if (!length(cols)) next
+          tl <- lapply(cols, function(v) sb$dtilde[drow[thr_v$item == v]])
+          pe <- .person_estimates(Xb[, cols, drop = FALSE], tl,
+                                  disc = sb$phi[g])
+          sel <- which(pe$n_items > 0 & !pe$extreme)
+          u_b[sel, si] <- pe$theta[sel]; se_b[sel, si] <- pe$se[sel]
+        }
+        lb <- .efrm_link_sets(u_b, se_b, sets_u, min_link_persons,
+                              boot_reps = 0)
+        ab <- lb$alpha; mb <- lb$mu
+      } else { ab <- setNames(1, sets_u); mb <- setNames(0, sets_u) }
+      db <- sb$dtilde / ab[set_of_drow] + mb[set_of_drow]
+      c(log(sb$phi), log(ab), mb, db)
+    }
+    collect <- matrix(NA_real_, boot_reps, G + 2L * S + Md)
+    for (r in seq_len(boot_reps)) {
+      res <- tryCatch(boot_replicate(sample.int(Npers, Npers, replace = TRUE)),
+                      error = function(e) NULL)
+      if (!is.null(res)) collect[r, ] <- res
+    }
+    collect <- collect[stats::complete.cases(collect), , drop = FALSE]
+    if (nrow(collect) < max(30, boot_reps / 2)) {
+      warning("the full bootstrap failed in most replicates; ",
+              "falling back to hybrid standard errors")
+    } else boot <- collect
   }
 
   # --- assembly in arbitrary units ----------------------------------------------
   delta <- dtil / alpha[set_of_drow] + mu[set_of_drow]
   rho_v <- alpha[vmap$set] * phi[vmap$group]
   thr_v$tau <- delta[drow]
-  cov_tau <- sol$cov_dtilde[drow, drow, drop = FALSE] /
-    tcrossprod(alpha[set_of_drow][drow])
+
+  # covariance of delta = dtilde/alpha + mu: the pairwise (conditional)
+  # component plus the unit component propagated by the delta method; the
+  # item-side and person-side information are treated as independent
+  cov_delta <- sol$cov_dtilde / tcrossprod(alpha[set_of_drow])
+  if (!is.null(boot)) {
+    cov_delta <- stats::cov(boot[, G + 2L * S + seq_len(Md), drop = FALSE])
+  } else if (S > 1L && !is.null(link$cov_link)) {
+    Sidx <- match(set_of_drow, sets_u)
+    Caa <- link$cov_link[seq_len(S), seq_len(S), drop = FALSE]
+    Cam <- link$cov_link[seq_len(S), S + seq_len(S), drop = FALSE]
+    Cmm <- link$cov_link[S + seq_len(S), S + seq_len(S), drop = FALSE]
+    g1 <- -(dtil / alpha[set_of_drow])     # d delta / d log alpha
+    T2 <- matrix(g1, Md, Md) * Cam[Sidx, Sidx, drop = FALSE]
+    cov_delta <- cov_delta + tcrossprod(g1) * Caa[Sidx, Sidx, drop = FALSE] +
+      T2 + t(T2) + Cmm[Sidx, Sidx, drop = FALSE]
+  }
+  cov_tau <- cov_delta[drow, drow, drop = FALSE]
   thr_v$se <- sqrt(pmax(diag(cov_tau), 0))
   thr_v$anchored <- FALSE
   est <- list(model = "EFRM", thr = thr_v, cov_tau = cov_tau,
@@ -587,24 +682,26 @@ rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
                        notes, disc = rho_v)
 
   # --- structural tables -----------------------------------------------------------
+  se_lp <- if (!is.null(boot)) apply(boot[, seq_len(G), drop = FALSE], 2, sd)
+           else unname(sol$se_log_phi)
+  se_la <- if (!is.null(boot)) apply(boot[, G + seq_len(S), drop = FALSE], 2, sd)
+           else unname(link$se_log_alpha)
   fit$phi_table <- data.frame(group = glevs, phi = unname(phi),
-                              se_log_phi = unname(sol$se_log_phi))
+                              se_log_phi = se_lp)
   fit$alpha_table <- data.frame(set = sets_u, alpha = unname(alpha),
-                                se_log_alpha = unname(link$se_log_alpha))
+                                se_log_alpha = se_la)
   fit$set_table <- data.frame(set = sets_u, mu = unname(mu),
                               alpha = unname(alpha),
                               n_items = as.integer(table(set_of)[sets_u]))
   fit$thresholds_arbitrary <- data.frame(item = items_o[thr_items$item],
                                          set = set_of_drow,
                                          k = thr_items$k, delta = delta,
-                                         se = sqrt(pmax(diag(
-                                           sol$cov_dtilde / tcrossprod(alpha[set_of_drow])), 0)))
+                                         se = sqrt(pmax(diag(cov_delta), 0)))
   fit$item_arbitrary <- do.call(rbind, lapply(seq_along(items_o), function(i) {
     rows <- which(thr_items$item == i)
     data.frame(item = items_o[i], set = set_of[items_o[i]],
                location = mean(delta[rows]),
-               se = sqrt(mean((sol$cov_dtilde[rows, rows, drop = FALSE] /
-                                 tcrossprod(alpha[set_of_drow][rows])))))
+               se = sqrt(mean(cov_delta[rows, rows, drop = FALSE])))
   }))
   rownames(fit$item_arbitrary) <- NULL
 
@@ -618,8 +715,9 @@ rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
                n_persons = npers, n_items = length(cols),
                alpha = unname(alpha[fr$set[j]]), phi = unname(phi[fr$group[j]]),
                rho = unname(alpha[fr$set[j]] * phi[fr$group[j]]),
-               se_log_rho = sqrt(unname(link$se_log_alpha[fr$set[j]])^2 +
-                                   unname(sol$se_log_phi[fr$group[j]])^2),
+               se_log_rho = sqrt(
+                 fit$alpha_table$se_log_alpha[match(fr$set[j], sets_u)]^2 +
+                 fit$phi_table$se_log_phi[match(fr$group[j], glevs)]^2),
                origin = unname(mu[fr$set[j]]),
                infit_ms = gf$infit_ms, outfit_ms = gf$outfit_ms,
                fit_resid = gf$fit_resid, n_responses = gf$n)
@@ -642,6 +740,8 @@ rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
     data.frame(group = g, theta = grid, expected_score = ew, sem = 1 / sqrt(info))
   }))
   fit$linking <- list(phi_edges = edges_g, alpha_edges = link$edges)
+  fit$se_method <- if (!is.null(boot)) "bootstrap" else "hybrid"
+  fit$boot_reps_used <- if (!is.null(boot)) nrow(boot) else NA_integer_
   fit$virtual_map <- vmap
   fit$set_of <- set_of
   class(fit) <- c("rasch_efrm", "rasch")

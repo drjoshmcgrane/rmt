@@ -16,7 +16,9 @@ rasch_efrm(
   na_codes = -1,
   maxit = 50,
   tol = 1e-07,
-  min_link_persons = 30
+  min_link_persons = 30,
+  se_method = c("hybrid", "bootstrap"),
+  boot_reps = NULL
 )
 }
 \arguments{
@@ -38,6 +40,13 @@ bilinear pairwise stage.}
 
 \item{min_link_persons}{Minimum number of common persons required for a
 set pair to contribute to the unit linking.}
+
+\item{se_method}{\code{"hybrid"} (sandwich + linking bootstrap + delta
+propagation; fast, default) or \code{"bootstrap"} (full person
+bootstrap of all stages).}
+
+\item{boot_reps}{Bootstrap replicates; defaults to 300 for the linking
+bootstrap and 200 for the full bootstrap.}
 }
 \value{
 An object of classes \code{"rasch_efrm"} and \code{"rasch"}. In
@@ -96,10 +105,20 @@ likelihood estimates evaluated under the final units
 linking stage are interim quantities for the unit ratios only and are
 discarded. The within-frame stage needs no re-estimation once
 \code{alpha} is known, because the pairwise likelihood is invariant to
-the within-set rescaling that \code{alpha} represents; threshold
-standard errors are conditional on the estimated units, whose own
-uncertainty is reported separately in \code{alpha_table} and
-\code{phi_table}.
+the within-set rescaling that \code{alpha} represents; the units' own
+uncertainty is reported in \code{alpha_table} and \code{phi_table} and
+folded into the common-unit standard errors as described below.
+
+Standard errors: under \code{se_method = "hybrid"} (default) the group
+units carry sandwich standard errors from the pairwise stage, the set
+units carry person-bootstrap standard errors from the linking stage, and
+the unit uncertainty is propagated into the common-unit threshold and
+item standard errors by the delta method (treating the item-side and
+person-side information as independent). Under
+\code{se_method = "bootstrap"} all stages are re-estimated on
+\code{boot_reps} person resamples and every standard error and the
+threshold covariance come from the replicate spread; slower, but captures
+all cross-dependencies jointly.
 }
 \examples{
 \donttest{

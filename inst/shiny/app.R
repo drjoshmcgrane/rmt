@@ -219,6 +219,11 @@ ui <- page_navbar(
           fileInput("ef_sets", "Item-set map (CSV: item,set)",
                     accept = ".csv", placeholder = "optional"),
           checkboxInput("ef_prefix", "Infer sets from item-name prefix", TRUE),
+          selectInput("ef_se", "Standard errors",
+                      c("Hybrid (fast)" = "hybrid",
+                        "Full person bootstrap (slow, exact)" = "bootstrap")),
+          numericInput("ef_reps", "Bootstrap replicates", value = 200,
+                       min = 50, step = 50),
           p(class = "text-muted small",
             "Each item-set by group cell is a frame with its own unit. Group units come from the person-free pairwise comparisons; set units from persons common to the sets.")
         ),
@@ -606,7 +611,11 @@ server <- function(input, output, session) {
                      items = names(ef_setmap()),
                      n_groups = input$ng, adjust_N = adjN,
                      maxit = max(5, input$maxit %||% 60),
-                     tol = max(1e-12, input$tol %||% 1e-8))
+                     tol = max(1e-12, input$tol %||% 1e-8),
+                     se_method = input$ef_se %||% "hybrid",
+                     boot_reps = if (!is.null(input$ef_reps) &&
+                                     !is.na(input$ef_reps))
+                       max(50, input$ef_reps) else NULL)
         } else if (identical(input$model_type, "mfrm")) {
           if (any(c(input$lp_person, input$lp_item, input$lp_score) == NONE) ||
               !length(input$lp_facets))
