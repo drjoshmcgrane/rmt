@@ -161,16 +161,39 @@
 # allows, at most 10, at least 2.
 .default_n_groups <- function(n_ne) max(2L, min(10L, n_ne %/% 50L))
 
-# Class intervals over non-extreme person locations, as equal-sized as
-# possible (rank quantiles). n_groups = NULL applies the default rule above.
+# Allocate locations to n_groups contiguous intervals, as equal-sized as
+# possible WITHOUT splitting ties: persons sharing a location are
+# indistinguishable (equal raw scores give equal measures), so they belong
+# to the same interval and interval sizes are generally unequal, as in the
+# worked class-interval tables of Andrich & Marais (2019, ch. 13; sizes
+# such as 13/20/16). A boundary falls where the cumulative count comes
+# closest to each equal-share target.
+.ci_allocate <- function(th, n_groups) {
+  ut <- sort(unique(th))
+  if (length(ut) <= n_groups) return(match(th, ut))
+  cnt <- as.integer(table(factor(th, levels = ut)))
+  cum <- cumsum(cnt)
+  n <- length(th)
+  b <- integer(n_groups - 1L)
+  lo <- 1L
+  for (gg in seq_len(n_groups - 1L)) {
+    target <- n * gg / n_groups
+    cand <- seq(lo, length(ut) - (n_groups - gg))
+    b[gg] <- cand[which.min(abs(cum[cand] - target))]
+    lo <- b[gg] + 1L
+  }
+  grp_of_ut <- findInterval(seq_along(ut), b + 1L) + 1L
+  grp_of_ut[match(th, ut)]
+}
+
+# Class intervals over non-extreme person locations. n_groups = NULL
+# applies the default rule above.
 .class_intervals <- function(theta, extreme, n_groups = NULL) {
   g <- rep(NA_integer_, length(theta))
   use <- which(!is.na(theta) & !extreme)
   if (is.null(n_groups)) n_groups <- .default_n_groups(length(use))
-  rk <- rank(theta[use], ties.method = "first")
-  brk <- unique(quantile(rk, probs = seq(0, 1, length.out = n_groups + 1)))
-  g[use] <- cut(rk, breaks = brk, include.lowest = TRUE, labels = FALSE)
-  attr(g, "n_groups") <- n_groups
+  g[use] <- .ci_allocate(theta[use], n_groups)
+  attr(g, "n_groups") <- max(g[use], na.rm = TRUE)
   g
 }
 
@@ -184,9 +207,7 @@
     g <- rep(NA_integer_, length(theta))
     if (!any(obs)) return(g)
     ng <- if (is.null(n_groups)) .default_n_groups(sum(obs)) else n_groups
-    rk <- rank(theta[obs], ties.method = "first")
-    brk <- unique(quantile(rk, probs = seq(0, 1, length.out = ng + 1)))
-    g[obs] <- cut(rk, breaks = brk, include.lowest = TRUE, labels = FALSE)
+    g[obs] <- .ci_allocate(theta[obs], ng)
     g
   })
 }

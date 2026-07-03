@@ -128,3 +128,19 @@ test_that("polytomous and missing-data analyses carry coherent fit output", {
   expect_equal(ratio, rep(ratio[1], 6), tolerance = 1e-10)
   expect_true(all(is.finite(fit$items$fit_resid)))
 })
+
+test_that("class intervals never split persons sharing a location", {
+  s <- simd(430, seq(-1.8, 1.8, length.out = 9), seed = 21)
+  fit <- rasch(s$X)
+  th <- fit$person$theta; ci <- fit$person$class_interval
+  ok <- !is.na(th) & !is.na(ci)
+  # every distinct location maps to exactly one interval
+  per_loc <- tapply(ci[ok], th[ok], function(g) length(unique(g)))
+  expect_true(all(per_loc == 1))
+  # intervals are contiguous in location and cover the requested count
+  ord <- order(th[ok])
+  expect_true(all(diff(ci[ok][ord]) >= 0))
+  expect_equal(max(ci, na.rm = TRUE), fit$n_groups)
+  # sizes are as equal as tie-preservation allows (no interval empty)
+  expect_true(all(tabulate(ci[ok]) > 0))
+})
