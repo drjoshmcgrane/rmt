@@ -173,3 +173,31 @@ test_that("MFRM handles two facets jointly (rater x occasion)", {
   # virtual items = item x rater x occasion cells
   expect_equal(ncol(fit$X), 3 * 3 * 2)
 })
+
+test_that("wide-format MFRM entry matches the long form exactly", {
+  set.seed(5)
+  persons <- sprintf("P%03d", 1:120); raters <- c("R1", "R2", "R3")
+  items <- sprintf("I%d", 1:5)
+  th <- setNames(rnorm(120), persons)
+  sev <- c(R1 = -0.4, R2 = 0, R3 = 0.4)
+  d <- expand.grid(person = persons, rater = raters, item = items,
+                   stringsAsFactors = FALSE)
+  dl <- setNames(seq(-1, 1, length.out = 5), items)
+  d$score <- rbinom(nrow(d), 1, plogis(th[d$person] - dl[d$item] - sev[d$rater]))
+  w <- reshape(d, idvar = c("person", "rater"), timevar = "item",
+               direction = "wide")
+  names(w) <- sub("^score\\.", "", names(w))
+  fl <- rasch_mfrm(d, "person", "item", "score", facets = "rater")
+  fw <- rasch_mfrm(w, "person", facets = "rater", items = items)
+  expect_equal(fw$items$location, fl$items$location, tolerance = 1e-10)
+  expect_equal(fw$facet_effects$rater$severity,
+               fl$facet_effects$rater$severity, tolerance = 1e-10)
+  # the interactive structure works through the wide entry too
+  fwi <- rasch_mfrm(w, "person", facets = "rater", items = items,
+                    interaction = "rater")
+  expect_false(is.null(fwi$interaction_effects))
+  # guardrails
+  expect_error(rasch_mfrm(w, "person", item = "x", score = "y",
+                          facets = "rater", items = items), "either")
+  expect_error(rasch_mfrm(w, "person", facets = "rater"), "either")
+})

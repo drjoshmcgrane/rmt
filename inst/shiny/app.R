@@ -123,8 +123,11 @@ if (requireNamespace("rmt", quietly = TRUE)) {
              group = grp, check.names = FALSE)
 }
 
-# long-format rated demo: 5 items, 6 raters (one erratic), incomplete design
-.demo_long <- function(seed = 21, Np = 250) {
+# rated (MFRM) demo, wide layout: 5 item columns, 6 raters (one erratic),
+# incomplete design — one row per person-by-rater combination. The responses
+# are simulated in long form (same structure and seed as always) and
+# reshaped, so results are unchanged.
+.demo_mfrm <- function(seed = 21, Np = 250) {
   set.seed(seed)
   simP <- function(theta, tau) { x <- 0:length(tau); p <- exp(x * theta - c(0, cumsum(tau))); p / sum(p) }
   persons <- sprintf("P%04d", seq_len(Np)); raters <- paste0("Rater_", 1:6)
@@ -141,8 +144,13 @@ if (requireNamespace("rmt", quietly = TRUE)) {
     if (r == "Rater_6" && runif(1) < 0.2) return(sample(0:3, 1))  # erratic rater
     sample(0:3, 1, prob = simP(th[p], tau[[i]] + rho[r]))
   }, d$person, d$item, d$rater)
-  rownames(d) <- NULL
-  d
+  # wide: one row per person-by-rater with one column per item
+  w <- reshape(d, idvar = c("person", "rater"), timevar = "item",
+               v.names = "score", direction = "wide")
+  names(w) <- sub("^score\\.", "", names(w))
+  w <- w[order(w$person, w$rater), c("person", "rater", names(tau))]
+  rownames(w) <- NULL
+  w
 }
 
 # frames demo: 2 person groups x 3 item sets with distinct units
@@ -387,7 +395,7 @@ panel_data <- nav_panel("Data", value = "p_data", icon = bs_icon("database"),
                       "Multiple choice, dichotomous" = "dich",
                       "Polytomous (PCM)" = "pcm",
                       "Rating scale (RSM)" = "rsm",
-                      "Ratings, long format (MFRM)" = "mfrm",
+                      "Ratings by raters (MFRM)" = "mfrm",
                       "Item sets x groups (EFRM)" = "efrm",
                       "Paired comparisons (BTL)" = "btl")),
         accordion(
@@ -423,16 +431,31 @@ panel_data <- nav_panel("Data", value = "p_data", icon = bs_icon("database"),
                 "Each item-set by group cell is a frame with its own unit. Group units come from the person-free pairwise comparisons; set units from persons common to the sets.")
             ),
             conditionalPanel("input.model_type == 'mfrm'",
-              h6("One row per response"),
+              radioButtons("lp_layout", "Data layout",
+                           c("Items in columns (wide)" = "wide",
+                             "One score per row (long)" = "long")),
+              p(class = "text-muted small",
+                "Wide: one row per person-by-facet combination (e.g. one row per script per rater), one column per item or criterion. Long: person, item, and score columns."),
               selectInput("lp_person", "Person column", NONE_CH),
-              selectInput("lp_item", "Item column", NONE_CH),
-              selectInput("lp_score", "Score column", NONE_CH),
+              conditionalPanel("input.lp_layout == 'long'",
+                selectInput("lp_item", "Item column", NONE_CH),
+                selectInput("lp_score", "Score column", NONE_CH)),
               selectizeInput("lp_facets", "Facet columns (e.g. rater)", NULL,
                              multiple = TRUE,
                              options = list(placeholder = "choose at least one")),
-              selectInput("lp_interaction", "Item-by-facet interaction (optional)", NONE_CH),
+              conditionalPanel("input.lp_layout == 'wide'",
+                selectizeInput("lp_items_wide", "Item columns", NULL,
+                               multiple = TRUE,
+                               options = list(placeholder = "all remaining"))),
+              radioButtons("lp_structure", "Facet structure",
+                           c("Additive" = "additive",
+                             "Interactive (item-by-facet)" = "interactive")),
               p(class = "text-muted small",
-                "Each item x facet combination is calibrated jointly; facet severities are reported with SEs and fit. An interaction lets one facet be more or less severe on particular items.")
+                "Additive: one severity per facet level. Interactive: additionally estimates item-by-facet effects (a rater harsh on particular items) — qualifies invariance."),
+              conditionalPanel("input.lp_structure == 'interactive'",
+                selectInput("lp_interaction", "Interacting facet", NULL)),
+              p(class = "text-muted small",
+                "Each item x facet combination is calibrated jointly; facet severities are reported with SEs and fit.")
             ),
             conditionalPanel("input.model_type == 'btl'",
               h6("One comparison per row"),
@@ -940,13 +963,14 @@ panel_facets <- nav_panel("Facets", value = "p_facets", icon = bs_icon("person-b
         selectizeInput("facet_sel", "Facet", NULL,
                        options = list(placeholder = "run a many-facet analysis")),
         p(class = "text-muted small",
-          "Severities from the joint calibration (positive = more severe). Pooled fit residuals beyond +/-2.5 flag inconsistent levels. Long-format analyses only.")),
+          "Severities from the joint calibration (positive = more severe). Pooled fit residuals beyond +/-2.5 flag inconsistent levels. Many-facet (MFRM) analyses only.")),
       tableCard("facet_tbl", "Facet severities and fit",
-        controls = cols_switch("facets_full")),
-      plotCard("facet_plot", "Severity caterpillar plot"),
+        controls = cols_switch("facets_full"),
+        footer = uiOutput("facet_structure_note")),
       conditionalPanel("output.has_interaction == true",
         tableCard("facet_int_tbl", "Item-by-facet interactions",
-                  "Shown when the analysis was run in interactive facet mode; gamma is the extra severity of a level on a particular item."))
+                  "Estimated because the interactive facet structure was chosen in the data roles; gamma is the extra severity of a level on a particular item, and significant terms qualify the invariance of the facet's severities across items.")),
+      plotCard("facet_plot", "Severity caterpillar plot")
     )
   )
 
@@ -1330,7 +1354,7 @@ server <- function(input, output, session) {
     if (!identical(input$demo_choice %||% "none", "none"))
       return(switch(input$demo_choice,
                     dich = .demo_dich(), rsm = .demo_rsm(),
-                    mfrm = .demo_long(), efrm = .demo_efrm(),
+                    mfrm = .demo_mfrm(), efrm = .demo_efrm(),
                     btl = .demo_btl(), .demo_data()))
     req(input$file)
     ext <- tolower(tools::file_ext(input$file$name))
@@ -1373,6 +1397,10 @@ server <- function(input, output, session) {
     updateSelectInput(session, "lp_score", choices = c(NONE_CH, nm),
                       selected = if (!is.na(g_sco)) g_sco else NONE)
     updateSelectizeInput(session, "lp_facets", choices = nm, selected = g_fac)
+    # wide layout: item columns = the remaining columns (like the Rasch
+    # item_cols guess), excluding the guessed person and facet columns
+    updateSelectizeInput(session, "lp_items_wide", choices = nm,
+                         selected = setdiff(nm, c(g_per, g_fac)))
     # frames layout guesses
     g_grp <- nm[grepl("group|year|grade|cohort|class$", tolower(nm))][1]
     updateSelectInput(session, "ef_id", choices = c(NONE_CH, nm),
@@ -1436,13 +1464,28 @@ server <- function(input, output, session) {
     setNames(rep("all", length(its)), its)
   })
 
+  # the interacting facet (shown in interactive facet mode) is chosen from
+  # the nominated facet columns; a single facet is preselected automatically
   observeEvent(input$lp_facets, {
-    sel <- if (!is.null(input$lp_interaction) &&
-               input$lp_interaction %in% input$lp_facets)
-      input$lp_interaction else NONE
+    fs <- input$lp_facets
+    sel <- if (!is.null(input$lp_interaction) && input$lp_interaction %in% fs)
+      input$lp_interaction else if (length(fs)) fs[1] else character(0)
     updateSelectInput(session, "lp_interaction",
-                      choices = c(NONE_CH, input$lp_facets), selected = sel)
+                      choices = if (length(fs)) fs else character(0),
+                      selected = sel)
   }, ignoreNULL = FALSE)
+
+  # keep the wide-mode item choices free of the chosen person / facet columns
+  observeEvent(c(input$lp_person, input$lp_facets), {
+    df <- raw_data(); nm <- names(df)
+    taken <- c(if (!is.null(input$lp_person) && input$lp_person != NONE)
+                 input$lp_person,
+               input$lp_facets)
+    sel <- setdiff(if (length(input$lp_items_wide)) input$lp_items_wide else nm,
+                   taken)
+    updateSelectizeInput(session, "lp_items_wide",
+                         choices = setdiff(nm, taken), selected = sel)
+  }, ignoreInit = TRUE)
 
   # keep item choices free of the chosen ID / factor columns
   observeEvent(c(input$id_col, input$factor_cols), {
@@ -1459,7 +1502,7 @@ server <- function(input, output, session) {
   .demo_labels <- c(dich = "Multiple choice, dichotomous",
                     pcm = "Polytomous (PCM)",
                     rsm = "Rating scale (RSM)",
-                    mfrm = "Ratings, long format (MFRM)",
+                    mfrm = "Ratings by raters (MFRM)",
                     efrm = "Item sets x groups (EFRM)",
                     btl = "Paired comparisons (BTL)")
   .demo_chip_labels <- c(dich = "Multiple choice", pcm = "Polytomous (PCM)",
@@ -1684,26 +1727,47 @@ server <- function(input, output, session) {
                                      !is.na(input$ef_reps))
                        max(50, input$ef_reps) else NULL)
         } else if (identical(input$model_type, "mfrm")) {
-          if (any(c(input$lp_person, input$lp_item, input$lp_score) == NONE) ||
-              !length(input$lp_facets))
-            stop("nominate the person, item, score, and at least one facet column")
-          code_call <- paste0("fit <- rasch_mfrm(dat,\n  ", paste(c(
-            paste0("person = ", qstr(input$lp_person)),
-            paste0("item = ", qstr(input$lp_item)),
-            paste0("score = ", qstr(input$lp_score)),
-            paste0("facets = ", qvec(input$lp_facets)),
-            code_args_common,
-            if (!is.null(input$lp_interaction) && input$lp_interaction != NONE)
-              paste0("interaction = ", qstr(input$lp_interaction)),
-            code_est), collapse = ",\n  "), ")")
-          rasch_mfrm(df, person = input$lp_person, item = input$lp_item,
-                     score = input$lp_score, facets = input$lp_facets,
-                     n_groups = ng, adjust_N = adjN,
-                     interaction = if (!is.null(input$lp_interaction) &&
-                                       input$lp_interaction != NONE)
-                       input$lp_interaction else NULL,
-                     maxit = max(5, input$maxit %||% 60),
-                     tol = max(1e-12, input$tol %||% 1e-8))
+          # the interaction is passed only in interactive facet mode, and
+          # only when the interacting facet is one of the chosen facets
+          lp_int <- if (identical(input$lp_structure %||% "additive",
+                                  "interactive") &&
+                        !is.null(input$lp_interaction) &&
+                        input$lp_interaction %in% input$lp_facets)
+            input$lp_interaction else NULL
+          if (identical(input$lp_layout %||% "wide", "wide")) {
+            if (identical(input$lp_person, NONE) || !length(input$lp_facets) ||
+                !length(input$lp_items_wide))
+              stop("nominate the person column, the item columns, and at least one facet column")
+            code_call <- paste0("fit <- rasch_mfrm(dat,\n  ", paste(c(
+              paste0("person = ", qstr(input$lp_person)),
+              paste0("facets = ", qvec(input$lp_facets)),
+              paste0("items = ", qvec(input$lp_items_wide)),
+              code_args_common,
+              if (!is.null(lp_int)) paste0("interaction = ", qstr(lp_int)),
+              code_est), collapse = ",\n  "), ")")
+            rasch_mfrm(df, person = input$lp_person,
+                       facets = input$lp_facets, items = input$lp_items_wide,
+                       n_groups = ng, adjust_N = adjN, interaction = lp_int,
+                       maxit = max(5, input$maxit %||% 60),
+                       tol = max(1e-12, input$tol %||% 1e-8))
+          } else {
+            if (any(c(input$lp_person, input$lp_item, input$lp_score) == NONE) ||
+                !length(input$lp_facets))
+              stop("nominate the person, item, score, and at least one facet column")
+            code_call <- paste0("fit <- rasch_mfrm(dat,\n  ", paste(c(
+              paste0("person = ", qstr(input$lp_person)),
+              paste0("item = ", qstr(input$lp_item)),
+              paste0("score = ", qstr(input$lp_score)),
+              paste0("facets = ", qvec(input$lp_facets)),
+              code_args_common,
+              if (!is.null(lp_int)) paste0("interaction = ", qstr(lp_int)),
+              code_est), collapse = ",\n  "), ")")
+            rasch_mfrm(df, person = input$lp_person, item = input$lp_item,
+                       score = input$lp_score, facets = input$lp_facets,
+                       n_groups = ng, adjust_N = adjN, interaction = lp_int,
+                       maxit = max(5, input$maxit %||% 60),
+                       tol = max(1e-12, input$tol %||% 1e-8))
+          }
         } else {
           idc <- if (!is.null(input$id_col) && input$id_col != NONE) input$id_col else NULL
           fac <- if (length(input$factor_cols)) input$factor_cols else NULL
@@ -3162,9 +3226,16 @@ server <- function(input, output, session) {
   facet_dat <- reactive({
     f <- fit()
     validate(need(inherits(f, "rasch_mfrm"),
-                  "Run a long-format (many-facet) analysis to see facet results."))
+                  "Run a many-facet (MFRM) analysis to see facet results."))
     req(input$facet_sel %in% f$facet_spec)
     f$facet_effects[[input$facet_sel]]
+  })
+  # additive fits carry no interaction card; the footer says so (and how to
+  # get one), so toggling the facet structure visibly changes this page
+  output$facet_structure_note <- renderUI({
+    f <- tryCatch(fit(), error = function(e) NULL)
+    if (!inherits(f, "rasch_mfrm") || !is.null(f$interaction)) return(NULL)
+    "Additive structure: no item-by-facet terms estimated (choose Interactive in the data roles to test them)."
   })
   register_table("facet_tbl", function() facet_dat(), function() {
     d <- curate(facet_dat(), "facet", full = isTRUE(input$facets_full))
@@ -3178,7 +3249,7 @@ server <- function(input, output, session) {
   register_plot("facet_plot", function() {
     f <- fit()
     validate(need(inherits(f, "rasch_mfrm"),
-                  "Run a long-format (many-facet) analysis to see facet results."))
+                  "Run a many-facet (MFRM) analysis to see facet results."))
     req(input$facet_sel %in% f$facet_spec)
     plot_facets(f, input$facet_sel)
   }, code = function()
@@ -3186,7 +3257,7 @@ server <- function(input, output, session) {
   facet_int <- reactive({
     f <- fit()
     validate(need(inherits(f, "rasch_mfrm") && !is.null(f$interaction),
-                  "Run a long-format analysis with an item-by-facet interaction selected."))
+                  "Choose the interactive facet structure in the data roles and re-estimate to test item-by-facet interactions."))
     f$interaction_effects
   })
   register_table("facet_int_tbl", function() facet_int(), function() {

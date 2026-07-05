@@ -7,9 +7,10 @@
 rasch_mfrm(
   data,
   person,
-  item,
-  score,
+  item = NULL,
+  score = NULL,
   facets,
+  items = NULL,
   n_groups = NULL,
   adjust_N = NA,
   na_codes = -1,
@@ -30,6 +31,12 @@ collapsed per item with a note).}
 
 \item{facets}{Character vector naming one or more facet columns (for
 example a rater column).}
+
+\item{items}{Optional character vector of item score columns for data in
+wide format: one row per person-by-facet combination (for example one
+row per script per rater) with one column per item or criterion. The
+long form (\code{item} + \code{score}) remains available for data
+where the facet varies within items.}
 
 \item{n_groups}{Number of class intervals for the item-trait chi-square;
 \code{NULL} (the default) applies the class-interval rule of Andrich and

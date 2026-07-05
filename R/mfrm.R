@@ -84,6 +84,11 @@
 #' @param adjust_N Optional reference sample size for the chi-square.
 #' @param na_codes Score values to read as missing (default \code{-1}); any
 #'   negative score is also treated as missing.
+#' @param items Optional character vector of item score columns for data in
+#'   wide format: one row per person-by-facet combination (for example one
+#'   row per script per rater) with one column per item or criterion. The
+#'   long form (\code{item} + \code{score}) remains available for data
+#'   where the facet varies within items.
 #' @param interaction Optional name of one facet to interact with the items
 #'   (interactive facet mode). Adds item-by-facet terms
 #'   \code{gamma[item, level]} with double sum-to-zero constraints on top of
@@ -128,9 +133,31 @@
 #'                   facets = "rater")
 #' fit$facet_effects$rater
 #' @export
-rasch_mfrm <- function(data, person, item, score, facets, n_groups = NULL,
+rasch_mfrm <- function(data, person, item = NULL, score = NULL, facets,
+                       items = NULL, n_groups = NULL,
                        adjust_N = NA, na_codes = -1, interaction = NULL,
                        maxit = 60, tol = 1e-8) {
+  # wide entry: item score columns are melted to the long form internally
+  if (!is.null(items)) {
+    if (!is.null(item) || !is.null(score))
+      stop("give either `items` (wide: one column per item) or `item` + `score` (long)")
+    miss <- setdiff(c(person, facets, items), names(data))
+    if (length(miss)) stop("column(s) not in data: ", paste(miss, collapse = ", "))
+    long <- data.frame(
+      ..person = rep(as.character(data[[person]]), length(items)),
+      ..item = rep(items, each = nrow(data)),
+      ..score = unlist(lapply(items, function(cn)
+        suppressWarnings(as.numeric(data[[cn]])))),
+      stringsAsFactors = FALSE)
+    for (f in facets) long[[f]] <- rep(as.character(data[[f]]), length(items))
+    return(rasch_mfrm(long, person = "..person", item = "..item",
+                      score = "..score", facets = facets,
+                      n_groups = n_groups, adjust_N = adjust_N,
+                      na_codes = na_codes, interaction = interaction,
+                      maxit = maxit, tol = tol))
+  }
+  if (is.null(item) || is.null(score))
+    stop("give either `items` (wide) or `item` + `score` (long)")
   if (!is.null(interaction)) {
     interaction <- as.character(interaction)[1]
     if (!interaction %in% facets)
