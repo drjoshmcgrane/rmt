@@ -14,8 +14,12 @@ character vector naming factor columns already nominated in the fit (via
 \code{rasch(..., factors = )}). Defaults to every factor stored in the
 fit.}
 
-\item{n_groups}{Number of trait class intervals; defaults to the value used
-in the fit.}
+\item{n_groups}{Number of trait class intervals. By default set per
+factor from the smallest group so every interval-by-group cell keeps
+about 30 expected responses (between 2 and 10 intervals) --
+independently of the interval count of the overall fit, whose rule
+guards intervals, not cells. The counts used are returned as the
+\code{n_groups} attribute.}
 
 \item{p_adjust}{Multiplicity adjustment method passed to
 \code{\link[stats]{p.adjust}}; \code{"BH"} (default) controls the false

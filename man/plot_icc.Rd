@@ -4,13 +4,7 @@
 \alias{plot_icc}
 \title{Plot an item characteristic curve}
 \usage{
-plot_icc(
-  fit,
-  item,
-  group = NULL,
-  n_groups = fit$n_groups,
-  grid = seq(-5, 5, 0.05)
-)
+plot_icc(fit, item, group = NULL, n_groups = NULL, grid = seq(-5, 5, 0.05))
 }
 \arguments{
 \item{fit}{A fitted object from \code{\link{rasch}}.}
@@ -21,7 +15,10 @@ plot_icc(
 factors nominated in the fit, for a DIF overlay; several names give
 the factor-combination cells (the factorial display).}
 
-\item{n_groups}{Number of class intervals for the observed means.}
+\item{n_groups}{Number of class intervals for the observed means; by
+default the fit's own count, or -- with a \code{group} overlay -- a
+count adapted to keep the smallest group's interval cells adequately
+filled.}
 
 \item{grid}{Logit grid over which to draw the model curve.}
 }

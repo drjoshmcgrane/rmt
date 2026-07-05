@@ -211,3 +211,30 @@ test_that("the factorial summary pivots to uniform/non-uniform per group term", 
   # no misfit flag on the items table any more
   expect_false("misfit" %in% names(fit$items))
 })
+
+test_that("DIF class intervals adapt to the cells each analysis uses", {
+  set.seed(1); n <- 800
+  g1 <- rep(c("m", "f"), n / 2)
+  g2 <- sample(c("a", "b", "c", "d"), n, TRUE)
+  d <- seq(-1.5, 1.5, length.out = 8)
+  X <- matrix(rbinom(n * 8, 1, plogis(outer(rnorm(n), d, "-"))), n, 8)
+  colnames(X) <- paste0("I", 1:8)
+  f <- rasch(data.frame(X, sex = g1, age = g2), factors = c("sex", "age"))
+  da <- dif_anova(f)
+  ng <- attr(da, "n_groups")
+  # per factor: smallest level / 30, clamped to 2..10, independent of overall
+  expect_equal(unname(ng["sex"]),
+               max(2L, min(10L, min(table(g1[!is.na(f$person$theta)])) %/% 30L)))
+  expect_equal(unname(ng["age"]),
+               max(2L, min(10L, min(table(g2[!is.na(f$person$theta)])) %/% 30L)))
+  expect_gt(ng["sex"], ng["age"])   # fewer levels leave bigger cells
+  # factorial: set from the smallest factor-combination cell
+  fa <- dif_anova_factorial(f)
+  cells <- interaction(g1, g2, drop = TRUE)
+  expect_equal(fa$n_groups,
+               max(2L, min(10L, min(table(cells[!is.na(f$person$theta)])) %/% 30L)))
+  expect_lt(fa$n_groups, ng["sex"])
+  # explicit n_groups still overrides
+  da5 <- dif_anova(f, n_groups = 5)
+  expect_true(all(attr(da5, "n_groups") == 5))
+})

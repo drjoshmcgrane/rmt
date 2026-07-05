@@ -2808,19 +2808,26 @@ server <- function(input, output, session) {
   })
   output$dif_note <- renderUI({
     if (identical(input$dif_factor, FACTORIAL)) {
-      d <- dif_fact()$terms
+      fr <- dif_fact()
+      d <- fr$terms
       sup <- sum(d$superseded, na.rm = TRUE)
-      sprintf("Note. %d of %d terms significant after adjustment%s.",
+      sprintf("Note. %d of %d terms significant after adjustment%s. Class intervals: %d, set from the smallest factor-combination cell (about 30 responses per interval-by-cell count).",
               sum(d$significant, na.rm = TRUE), nrow(d),
-              if (sup) sprintf(" (%d superseded by an interaction)", sup) else "")
+              if (sup) sprintf(" (%d superseded by an interaction)", sup)
+              else "", fr$n_groups %||% NA_integer_)
     } else {
       d <- dif_res()
+      ng <- attr(d, "n_groups")
       parts <- vapply(split(d, d$factor), function(g)
         sprintf("%s: %d uniform, %d non-uniform", g$factor[1],
                 sum(g$uniform_DIF, na.rm = TRUE),
                 sum(g$nonuniform_DIF, na.rm = TRUE)), "")
+      ci_txt <- if (!is.null(ng))
+        sprintf(" Class intervals per factor: %s (set from each factor's smallest group).",
+                paste(names(ng), ng, sep = " = ", collapse = ", "))
+      else ""
       paste0("Note. Items flagged per factor - ",
-             paste(parts, collapse = "; "), ".")
+             paste(parts, collapse = "; "), ".", ci_txt)
     }
   })
   register_table("dif_tukey_tbl", function() dif_fact()$tukey, function() {

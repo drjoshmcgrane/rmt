@@ -20,8 +20,10 @@ dif_anova_factorial(
 \item{factors}{As in \code{\link{dif_anova}}; at least one factor, usually
 two or more.}
 
-\item{n_groups}{Number of trait class intervals; defaults to the value
-used in the fit.}
+\item{n_groups}{Number of trait class intervals. By default set from
+the smallest factor-combination cell so every interval-by-cell count
+keeps about 30 expected responses (between 2 and 10 intervals); the
+value used is returned as \code{n_groups}.}
 
 \item{p_adjust}{Multiplicity adjustment across items within each term;
 default \code{"BH"}.}

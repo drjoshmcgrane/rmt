@@ -60,7 +60,10 @@
 #' @param group Optional person grouping vector, or one or more names of
 #'   factors nominated in the fit, for a DIF overlay; several names give
 #'   the factor-combination cells (the factorial display).
-#' @param n_groups Number of class intervals for the observed means.
+#' @param n_groups Number of class intervals for the observed means; by
+#'   default the fit's own count, or -- with a \code{group} overlay -- a
+#'   count adapted to keep the smallest group's interval cells adequately
+#'   filled.
 #' @param grid Logit grid over which to draw the model curve.
 #' @return Called for its plotting side effect; invisibly \code{NULL}.
 #' @examples
@@ -70,13 +73,16 @@
 #' colnames(X) <- sprintf("I%02d", 1:6)
 #' plot_icc(rasch(X), "I03")
 #' @export
-plot_icc <- function(fit, item, group = NULL, n_groups = fit$n_groups,
+plot_icc <- function(fit, item, group = NULL, n_groups = NULL,
                      grid = seq(-5, 5, 0.05)) {
   i <- .item_idx(fit, item); tau_i <- fit$tau_list[[i]]; mmax <- length(tau_i)
   if (is.character(group) && length(group) < nrow(fit$X) &&
       !is.null(fit$factors) && all(group %in% names(fit$factors)))
     group <- if (length(group) == 1L) fit$factors[[group]] else
       interaction(fit$factors[group], sep = ":", drop = TRUE)
+  if (is.null(n_groups))
+    n_groups <- if (is.null(group)) fit$n_groups else
+      .dif_n_groups(fit, group)
   Ecurve <- vapply(grid, function(th)
     item_moments(th, tau_i, disc = .disc_of(fit, i))$E, 0)
   th <- fit$person$theta; x <- fit$X[, i]; ok <- !is.na(th) & !is.na(x)

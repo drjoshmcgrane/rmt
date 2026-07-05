@@ -22,6 +22,18 @@
   factors
 }
 
+# Class intervals for a DIF analysis are set from the cells the analysis
+# actually uses: the residual ANOVA crosses trait intervals with group
+# levels (or with the factor-combination cells in the factorial), so the
+# interval count is chosen to keep the smallest group's expected cell size
+# adequate -- independently of the interval count of the overall fit.
+.dif_n_groups <- function(fit, grp, cell_min = 30L) {
+  ok <- !is.na(grp) & !is.na(fit$person$theta)
+  if (!any(ok)) return(2L)
+  n_min <- min(table(droplevels(factor(grp[ok]))))
+  max(2L, min(10L, as.integer(n_min) %/% as.integer(cell_min)))
+}
+
 .dif_class_intervals <- function(fit, n_groups) {
   ci <- fit$person$class_interval
   if (is.null(ci) || !identical(n_groups, fit$n_groups))
@@ -45,8 +57,12 @@
 #'   character vector naming factor columns already nominated in the fit (via
 #'   \code{rasch(..., factors = )}). Defaults to every factor stored in the
 #'   fit.
-#' @param n_groups Number of trait class intervals; defaults to the value used
-#'   in the fit.
+#' @param n_groups Number of trait class intervals. By default set per
+#'   factor from the smallest group so every interval-by-group cell keeps
+#'   about 30 expected responses (between 2 and 10 intervals) --
+#'   independently of the interval count of the overall fit, whose rule
+#'   guards intervals, not cells. The counts used are returned as the
+#'   \code{n_groups} attribute.
 #' @param p_adjust Multiplicity adjustment method passed to
 #'   \code{\link[stats]{p.adjust}}; \code{"BH"} (default) controls the false
 #'   discovery rate, \code{"holm"} or \code{"bonferroni"} the familywise
@@ -74,12 +90,13 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL, p_adjust = "BH",
                       alpha = 0.05) {
   Z <- fit$residuals; L <- ncol(Z)
   factors <- .dif_factors(fit, factors)
-  if (is.null(n_groups)) n_groups <- fit$n_groups
-  ci <- .dif_class_intervals(fit, n_groups)
 
-  res <- list()
+  res <- list(); ng_used <- integer(0)
   for (fname in names(factors)) {
     grp <- factor(factors[[fname]])
+    ng_f <- if (is.null(n_groups)) .dif_n_groups(fit, grp) else n_groups
+    ng_used[fname] <- ng_f
+    ci <- .dif_class_intervals(fit, ng_f)
     out <- data.frame(factor = fname, item = colnames(Z),
                       F_uniform = NA_real_, p_uniform = NA_real_,
                       eta2_uniform = NA_real_,
@@ -118,6 +135,7 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL, p_adjust = "BH",
   }
   out <- do.call(rbind, res)
   rownames(out) <- NULL
+  attr(out, "n_groups") <- ng_used
   out
 }
 
@@ -148,8 +166,10 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL, p_adjust = "BH",
 #' @param fit A fitted object from \code{\link{rasch}}.
 #' @param factors As in \code{\link{dif_anova}}; at least one factor, usually
 #'   two or more.
-#' @param n_groups Number of trait class intervals; defaults to the value
-#'   used in the fit.
+#' @param n_groups Number of trait class intervals. By default set from
+#'   the smallest factor-combination cell so every interval-by-cell count
+#'   keeps about 30 expected responses (between 2 and 10 intervals); the
+#'   value used is returned as \code{n_groups}.
 #' @param p_adjust Multiplicity adjustment across items within each term;
 #'   default \code{"BH"}.
 #' @param alpha Significance level applied to the adjusted probabilities.
@@ -198,7 +218,10 @@ dif_anova_factorial <- function(fit, factors = NULL, n_groups = NULL,
   effects <- match.arg(effects)
   Z <- fit$residuals; L <- ncol(Z)
   factors <- .dif_factors(fit, factors)
-  if (is.null(n_groups)) n_groups <- fit$n_groups
+  if (is.null(n_groups)) {
+    cells <- interaction(factors, drop = TRUE)
+    n_groups <- .dif_n_groups(fit, cells)
+  }
   ci <- .dif_class_intervals(fit, n_groups)
 
   fnames <- names(factors)
@@ -345,7 +368,7 @@ dif_anova_factorial <- function(fit, factors = NULL, n_groups = NULL,
   rownames(summary_tab) <- NULL
 
   out <- list(summary = summary_tab, terms = terms, tukey = tukey,
-              alpha = alpha, p_adjust = p_adjust)
+              n_groups = n_groups, alpha = alpha, p_adjust = p_adjust)
   if (isTRUE(sizes)) out$sizes <- size_tab
   out
 }
