@@ -138,3 +138,30 @@ test_that("report_html writes a complete self-contained report", {
   expect_equal(enc("M"), "TQ==")
   expect_equal(enc("foobar"), "Zm9vYmFy")
 })
+
+test_that("the fit and targeting summaries are complete tidy tables", {
+  set.seed(1)
+  d <- seq(-2, 2, length.out = 6)
+  X <- matrix(rbinom(300 * 6, 1, plogis(outer(rnorm(300), d, "-"))), 300, 6)
+  colnames(X) <- paste0("I", 1:6)
+  f <- rasch(X)
+  ft <- fit_summary_table(f)
+  tt <- targeting_table(f)
+  expect_identical(names(ft), c("statistic", "value"))
+  expect_identical(names(tt), c("statistic", "value"))
+  expect_false(anyNA(ft$value))
+  # spot-check against the fit object
+  expect_equal(ft$value[ft$statistic == "Model"], f$model)
+  expect_lt(abs(as.numeric(ft$value[ft$statistic == "Total item-trait chi-square"]) -
+                f$total_chisq), 5e-4)
+  expect_lt(abs(as.numeric(tt$value[tt$statistic == "PSI"]) - f$psi$PSI), 5e-4)
+  expect_lt(abs(as.numeric(tt$value[tt$statistic == "Coefficient alpha"]) -
+                f$alpha$alpha), 5e-4)
+  # robust when alpha is not applicable (missing data)
+  Xm <- X; Xm[1:150, 1] <- NA; Xm[151:300, 6] <- NA
+  fm <- rasch(Xm)
+  ttm <- targeting_table(fm)
+  expect_true("NA" %in% ttm$value[ttm$statistic == "Coefficient alpha"] ||
+              is.finite(as.numeric(ttm$value[ttm$statistic == "Coefficient alpha"])))
+  expect_no_error(fit_summary_table(fm))
+})

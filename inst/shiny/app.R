@@ -542,16 +542,8 @@ panel_data <- nav_panel("Data", value = "p_data", icon = bs_icon("database"),
   )
 
 # -------------------------------------------------------------- SUMMARY --
-# bottom-row cards, built by the server so the CTT card can span the full
-# width when the likelihood-ratio card does not apply to the current fit
-.ctt_card <- function()
-  card(
-    full_screen = TRUE,
-    card_header_bar("Traditional statistics (CTT)",
-      buttons = downloadButton("ctt_tbl_csv", "CSV",
-                               class = "btn-outline-secondary btn-xs")),
-    card_body(uiOutput("ctt_head"), DTOutput("ctt_tbl"),
-              padding = 12, fillable = FALSE))
+# bottom row built by the server: the likelihood-ratio card only applies to
+# a PCM fit whose items share a common maximum score, so it hides otherwise
 .lr_card <- function()
   card(info_header("Likelihood-ratio test (PCM vs rating)",
          "Compares the partial credit model against the more parsimonious rating parameterisation with common thresholds; a non-significant result supports the rating model."),
@@ -565,37 +557,15 @@ panel_data <- nav_panel("Data", value = "p_data", icon = bs_icon("database"),
 
 panel_summary <- nav_panel("Summary", value = "p_summary", icon = bs_icon("clipboard-data"),
     uiOutput("vboxes"),
-    layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
-      card(info_header("Test of fit",
-             "The total item-trait chi-square tests the invariance of item ordering across the trait; a significant result means at least one item's difficulty is not invariant across class intervals (Andrich & Marais 2019). The cell df factor scales each item's chi-square degrees of freedom by the proportion of class-interval cells with enough responders to contribute."),
-           card_body(verbatimTextOutput("fit_summary"))),
-      card(card_header("Targeting & reliability"), card_body(verbatimTextOutput("targeting")))
-    ),
     # DT cards sit inside plain divs: the grid row would otherwise stretch
     # them to equal height and crop the taller table mid-row
     layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
-      div(card(
-        full_screen = TRUE,
-        card_header_bar("Score-to-measure table",
-          buttons = downloadButton("score_tbl_csv", "CSV",
-                                   class = "btn-outline-secondary btn-xs")),
-        card_body(
-          conditionalPanel("output.has_score_table == true",
-            p(class = "text-muted small mb-2",
-              "Location and SE for every raw score (complete responders), with the frequency and cumulative percentage at each score."),
-            div(class = "d-flex gap-3 flex-wrap",
-              selectInput("st_method", "Estimator",
-                          c("WLE (Warm)" = "wle", "MLE" = "mle"), width = "170px"),
-              selectInput("st_extremes", "Extreme scores",
-                          c("Model" = "model",
-                            "Extrapolated (geometric)" = "extrapolated"),
-                          width = "200px"))),
-          DTOutput("score_tbl"), rcode_details("score_tbl"),
-          padding = 12, fillable = FALSE))),
-      div(tableCard("thr_tbl", "Thresholds with standard errors"))
+      div(tableCard("fitsum_tbl", "Test of fit",
+        info = "The total item-trait chi-square tests the invariance of item ordering across the trait; a significant result means at least one item's difficulty is not invariant across class intervals (Andrich & Marais 2019). The cell df factor scales each item's chi-square degrees of freedom by the proportion of class-interval cells with enough responders to contribute.",
+        footer = uiOutput("fitsum_notes"))),
+      div(tableCard("targeting_tbl", "Targeting & reliability"))
     ),
-    # server-rendered: the CTT card spans the full width when the LR card
-    # does not apply (no empty half-row)
+    # server-rendered: the likelihood-ratio card only when it applies
     uiOutput("summary_bottom")
   )
 
@@ -686,7 +656,16 @@ panel_items <- nav_panel("Items", value = "p_items", icon = bs_icon("list-check"
         plotCard("imap",
           info = "Item locations plotted against their fit residuals; items beyond |2.5| warrant inspection.")),
       accordion_panel("Fit residual distribution", value = "items_rdist",
-        plotCard("rdist_i"))),
+        plotCard("rdist_i")),
+      accordion_panel("Traditional statistics", value = "items_ctt",
+        card(
+          full_screen = TRUE,
+          card_header_bar(
+            buttons = downloadButton("ctt_tbl_csv", "CSV",
+                                     class = "btn-outline-secondary btn-xs")),
+          card_body(uiOutput("ctt_head"), DTOutput("ctt_tbl"),
+                    rcode_details("ctt_tbl"),
+                    padding = 12, fillable = FALSE)))),
     uiOutput("pc_comp_ui"),
     conditionalPanel("output.has_mc == true",
     layout_columns(col_widths = 12,
@@ -1874,11 +1853,6 @@ server <- function(input, output, session) {
     inherits(f, "rasch_mfrm") && !is.null(f$interaction)
   })
   outputOptions(output, "has_interaction", suspendWhenHidden = FALSE)
-  output$has_score_table <- reactive({
-    f <- tryCatch(fit(), error = function(e) NULL)
-    !is.null(f) && !is.null(f$score_table)
-  })
-  outputOptions(output, "has_score_table", suspendWhenHidden = FALSE)
   output$is_btl <- reactive(!is.null(btl_fit()))
   outputOptions(output, "is_btl", suspendWhenHidden = FALSE)
   # empty-state flags for the run-on-demand cards: before a run the card
@@ -2222,107 +2196,41 @@ server <- function(input, output, session) {
     )
   })
 
-  output$fit_summary <- renderPrint({
-    f <- fit(); ss <- f$summary_stats
-    cat(sprintf("Model: %s  |  Estimation: pairwise conditional ML (%s, %d iterations)\n",
-                f$model, if (f$est$converged) "converged" else "NOT CONVERGED",
-                f$est$iterations))
-    cat(sprintf("Total item-trait chi-square: %.3f on %d df, p = %s  (%d class intervals)\n",
-                f$total_chisq, f$total_df, fmt_p(f$total_chisq_p), f$n_groups))
-    cat(sprintf("Item fit residual:   mean %6.2f  SD %5.2f  skew %5.2f  kurt %5.2f  (ideal 0, 1)\n",
-                f$item_fit_summary$mean, f$item_fit_summary$sd,
-                f$item_fit_summary$skewness, f$item_fit_summary$kurtosis))
-    cat(sprintf("Person fit residual: mean %6.2f  SD %5.2f  skew %5.2f  kurt %5.2f  (ideal 0, 1)\n",
-                f$person_fit_summary$mean, f$person_fit_summary$sd,
-                f$person_fit_summary$skewness, f$person_fit_summary$kurtosis))
-    cat(sprintf("Fit-location correlation: items %.3f, persons %.3f\n",
-                ss$cor_item_fit_location, ss$cor_person_fit_location))
-    cat(sprintf("Items with adjusted chi-square p < .05: %d of %d\n",
-                sum(f$items$p_adj < 0.05, na.rm = TRUE), nrow(f$items)))
-    dis <- names(which(vapply(f$thresholds_diag, function(d)
-      !d$ordered && length(d$thresholds) > 1, TRUE)))
-    cat("Disordered thresholds:", if (length(dis)) paste(dis, collapse = ", ") else "none", "\n")
-    if (length(f$notes)) cat("Notes:", paste(f$notes, collapse = "; "), "\n")
+  # test-of-fit and targeting/reliability summaries as statistic/value
+  # tables (the package builds them; the CSVs carry the raw column names).
+  # The score-to-measure table stays available via score_table(fit) and the
+  # everything-ZIP; thresholds live on the Items explorer Thresholds tab.
+  register_table("fitsum_tbl", function() fit_summary_table(fit()),
+                 function() {
+    d <- fit_summary_table(fit())
+    names(d) <- c("Statistic", "Value")
+    num_dt(d, paging = FALSE)
+  }, code = function() "fit_summary_table(fit)")
+  output$fitsum_tbl_csv <- downloadHandler(
+    filename = function() "fit_summary.csv",
+    content = function(file)
+      write.csv(fit_summary_table(fit()), file, row.names = FALSE))
+  # routine handling notes (the old text panel printed fit$notes)
+  output$fitsum_notes <- renderUI({
+    f <- fit()
+    if (!length(f$notes)) return(NULL)
+    sprintf("Note. %s.", paste(f$notes, collapse = "; "))
   })
+  register_table("targeting_tbl", function() targeting_table(fit()),
+                 function() {
+    d <- targeting_table(fit())
+    names(d) <- c("Statistic", "Value")
+    num_dt(d, paging = FALSE)
+  }, code = function() "targeting_table(fit)")
+  output$targeting_tbl_csv <- downloadHandler(
+    filename = function() "targeting.csv",
+    content = function(file)
+      write.csv(targeting_table(fit()), file, row.names = FALSE))
 
-  output$targeting <- renderPrint({
-    f <- fit(); t <- f$targeting; ss <- f$summary_stats
-    cat(sprintf("Person location: mean %6.3f  SD %.3f  skew %5.2f  kurt %5.2f\n",
-                ss$person_location$mean, ss$person_location$sd,
-                ss$person_location$skewness, ss$person_location$kurtosis))
-    cat(sprintf("  without extremes: mean %.3f  SD %.3f\n",
-                ss$person_location_noext$mean, ss$person_location_noext$sd))
-    cat(sprintf("Item location:   mean %6.3f (constrained)  SD %.3f  skew %5.2f  kurt %5.2f\n",
-                ss$item_location$mean, ss$item_location$sd,
-                ss$item_location$skewness, ss$item_location$kurtosis))
-    cat(sprintf("Threshold range:      %6.3f to %.3f\n",
-                t$threshold_range[1], t$threshold_range[2]))
-    cat(sprintf("Persons beyond thresholds: %.1f%% below, %.1f%% above\n",
-                100 * t$prop_below, 100 * t$prop_above))
-    cat(sprintf("\nPSI: %.3f (separation %.3f)\n", f$psi$PSI, f$psi$separation))
-    cat(sprintf("PSI without extremes: %.3f (n = %d)\n", f$psi_noext$PSI, f$psi_noext$n))
-    cat(sprintf("Item separation index: %.3f\n", f$isi$PSI))
-    if (finite1(f$alpha$alpha))
-      cat(sprintf("Cronbach alpha: %.3f%s\n", f$alpha$alpha,
-                  if (isFALSE(f$alpha$applicable))
-                    sprintf(" - complete cases only (n = %d)", f$alpha$n)
-                  else sprintf(" (n = %d complete cases)", f$alpha$n)))
-    else
-      cat(sprintf("Cronbach alpha: not available (%d complete cases)\n",
-                  f$alpha$n))
-  })
-
-  # score table with the chosen estimator and extreme-score treatment; the
-  # geometric extrapolation needs >= 4 score points, so failures fall back
-  score_dat <- reactive({
-    f <- fit()
-    if (is.null(f$score_table)) return(NULL)
-    method <- input$st_method %||% "wle"
-    ext <- input$st_extremes %||% "model"
-    tryCatch(score_table(f, method = method, extremes = ext),
-             error = function(e) {
-               showNotification(paste0("Score table (", method, ", ", ext,
-                                       "): ", conditionMessage(e),
-                                       " - showing model extremes."),
-                                type = "warning", duration = 8)
-               score_table(f, method = method, extremes = "model")
-             })
-  })
-  register_table("score_tbl", function() {
-    f <- fit()
-    if (!is.null(f$score_table)) score_dat() else f$score_curves
-  }, function() {
-    f <- fit()
-    if (!is.null(f$score_table)) {
-      d <- score_dat()
-      if ("extrapolated" %in% names(d)) {
-        if (!isTRUE(any(d$extrapolated))) d$extrapolated <- NULL
-        else d$extrapolated <- ifelse(d$extrapolated, "*", "")
-      }
-      datatable(d, rownames = FALSE, style = "bootstrap5",
-                class = "table-sm compact hover order-column",
-                options = list(pageLength = 15, scrollX = TRUE,
-                               dom = if (nrow(d) > 15) "tip" else "t")) |>
-        formatRound(c("theta", "se"), 3) |>
-        formatRound("cum_pct", 1)
-    } else {
-      validate(need(!is.null(f$score_curves),
-                    "No score conversion available for this fit."))
-      datatable(f$score_curves, rownames = FALSE, style = "bootstrap5",
-                class = "table-sm compact hover order-column",
-                caption = "Raw scores are not sufficient under unequal frame units; per-group expected-score curves replace the score table.",
-                options = list(pageLength = 15, scrollX = TRUE, dom = "tip")) |>
-        formatRound(c("theta", "expected_score", "sem"), 3)
-    }
-  }, code = function() {
-    f <- fit()
-    if (is.null(f$score_table)) return("fit$score_curves")
-    sprintf('score_table(fit, method = "%s", extremes = "%s")',
-            input$st_method %||% "wle", input$st_extremes %||% "model")
-  })
-
-  # traditional (CTT) statistics
+  # traditional (CTT) statistics: shown on the Items page (last accordion
+  # panel), with the header line, CSV, and code footer registered here
   ctt_res <- reactive(tryCatch(ctt_table(fit()), error = function(e) e))
+  register_code("ctt_tbl", function() "ctt_table(fit)$table")
   output$ctt_head <- renderUI({
     ct <- ctt_res()
     if (inherits(ct, "error"))
@@ -2356,18 +2264,14 @@ server <- function(input, output, session) {
 
   # likelihood-ratio test of PCM against the rating parameterisation; only
   # meaningful for a PCM fit whose items share a common maximum score > 1.
-  # The bottom row is server-built so the CTT card spans the full width
-  # whenever the LR card does not apply.
+  # The bottom row is server-built so the card hides when it does not apply.
   lr_res <- reactiveVal(NULL)
   output$summary_bottom <- renderUI({
     f <- fit()
     lr_applies <- identical(f$model, "PCM") && length(unique(f$m)) == 1L &&
       max(f$m) >= 2L
-    if (lr_applies)
-      layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
-                     div(.ctt_card()), .lr_card())
-    else
-      layout_columns(col_widths = 12, div(.ctt_card()))
+    if (!lr_applies) return(NULL)
+    layout_columns(col_widths = breakpoints(sm = 12, xl = 6), .lr_card())
   })
   register_code("lr", function() "lr_test(fit)")
   observeEvent(input$run_lr, {
@@ -2392,16 +2296,6 @@ server <- function(input, output, session) {
     cat(sprintf("log-likelihood (pairwise composite): PCM %.3f, rating %.3f\n",
                 r$loglik_pcm, r$loglik_rsm))
   })
-  register_table("thr_tbl", function() {
-    f <- fit(); d <- f$thresholds
-    data.frame(item = f$items$item[d$item], threshold = d$k,
-               tau = d$tau, se = d$se)
-  }, function() {
-    f <- fit(); d <- f$thresholds
-    num_dt(data.frame(item = f$items$item[d$item], threshold = d$k,
-                      tau = d$tau, se = d$se), page_len = 25)
-  }, code = function() "fit$thresholds")
-
   # ---------------------------------------------------------------- items --
   output$items_vboxes <- renderUI({
     f <- fit()

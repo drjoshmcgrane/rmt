@@ -82,7 +82,7 @@
 save_item_plots <- function(fit, what = c("icc", "ccc", "tpc", "cfreq"),
                             file, items = NULL, n_groups = fit$n_groups,
                             grid = seq(-5, 5, 0.05), observed = TRUE,
-                            width = 8, height = 5.5, dpi = 150) {
+                            width = 8, height = 5.5, dpi = 300) {
   what <- match.arg(what)
   its <- if (is.null(items)) fit$items$item else items
   draw <- function(it) switch(what,
@@ -118,7 +118,7 @@ save_item_plots <- function(fit, what = c("icc", "ccc", "tpc", "cfreq"),
 #' save_person_plots(f, file.path(tempdir(), "kidmaps.pdf"), persons = 1:5)
 #' @export
 save_person_plots <- function(fit, file, persons = NULL, level = 0.95,
-                              width = 8, height = 6, dpi = 150) {
+                              width = 8, height = 6, dpi = 300) {
   ps <- if (is.null(persons)) which(!is.na(fit$person$theta)) else persons
   ids <- if (is.numeric(ps)) fit$person$id[ps] else ps
   thunks <- lapply(ps, function(p)

@@ -11,7 +11,7 @@ save_person_plots(
   level = 0.95,
   width = 8,
   height = 6,
-  dpi = 150
+  dpi = 300
 )
 }
 \arguments{

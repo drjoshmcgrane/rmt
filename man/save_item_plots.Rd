@@ -14,7 +14,7 @@ save_item_plots(
   observed = TRUE,
   width = 8,
   height = 5.5,
-  dpi = 150
+  dpi = 300
 )
 }
 \arguments{
