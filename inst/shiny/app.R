@@ -7,10 +7,12 @@
 # export of all tables and plots as a ZIP archive.
 # Launch with rmt::run_app(), or shiny::runApp() from this folder.
 # ---------------------------------------------------------------------------
-library(shiny)
-library(bslib)
-library(DT)
-library(bsicons)
+suppressPackageStartupMessages({
+  library(shiny)
+  library(bslib)
+  library(DT)
+  library(bsicons)
+})
 
 if (requireNamespace("rmt", quietly = TRUE)) {
   library(rmt)
@@ -1904,11 +1906,13 @@ server <- function(input, output, session) {
   num_dt <- function(d, digits = 3, fit_col = NULL, p_bold = NULL,
                      page_len = 15, paging = NULL, ...) {
     orig <- names(d)
-    num <- vapply(d, is.numeric, TRUE)
+    # unname: which() on named logicals yields named position vectors, and
+    # jsonlite warns whenever one reaches the widget payload
+    num <- unname(vapply(d, is.numeric, TRUE))
     # integer-valued columns (counts, whole-number df) show no decimals;
     # fractional df columns fail the test and keep the 3-dp rounding
-    intcol <- vapply(d, function(v)
-      is.numeric(v) && all(is.na(v) | v == round(v)), TRUE)
+    intcol <- unname(vapply(d, function(v)
+      is.numeric(v) && all(is.na(v) | v == round(v)), TRUE))
     pcol <- num & grepl(P_COL_RE, orig)
     # pager and info line appear only when the table overflows one page;
     # `paging` can force either way per table
@@ -1926,7 +1930,9 @@ server <- function(input, output, session) {
     # display-only renaming; formatting targets are column positions, so
     # they stay tied to the original names computed above
     hit <- orig %in% names(DISPLAY_NAMES)
-    names(d)[hit] <- DISPLAY_NAMES[orig[hit]]
+    # unname: a named names-vector rides into the widget payload and makes
+    # jsonlite warn on every table render
+    names(d)[hit] <- unname(DISPLAY_NAMES[orig[hit]])
     dt <- datatable(d, rownames = FALSE, style = "bootstrap5",
                     class = "table-sm compact hover order-column", ...,
                     options = opts)
