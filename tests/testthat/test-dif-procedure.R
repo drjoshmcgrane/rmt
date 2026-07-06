@@ -238,3 +238,43 @@ test_that("DIF class intervals adapt to the cells each analysis uses", {
   da5 <- dif_anova(f, n_groups = 5)
   expect_true(all(attr(da5, "n_groups") == 5))
 })
+
+test_that("dif_anova tests a within-subject factor against person clustering", {
+  set.seed(7)
+  N <- 300; d <- seq(-1.5, 1.5, length.out = 8); th <- rnorm(N)
+  gen <- function(shift) {
+    s <- matrix(0, N, 8); s[, 3] <- shift
+    matrix(rbinom(N * 8, 1, plogis(outer(th, d, "-") - s)), N, 8)
+  }
+  X <- rbind(gen(0), gen(0.9)); colnames(X) <- paste0("I", 1:8)
+  dat <- data.frame(X, occasion = rep(c("t1", "t2"), each = N))
+  id <- rep(sprintf("P%03d", 1:N), 2)
+  fit <- rasch(dat, factors = "occasion", id = id)
+
+  da <- dif_anova(fit)
+  # the repeated occasion factor is auto-detected as within-subject
+  expect_identical(attr(da, "within"), "occasion")
+  expect_true(all(da$within))
+  # the planted within-subject DIF on I3 is recovered, clean items are null
+  expect_true(da$uniform_DIF[da$item == "I3"])
+  expect_equal(sum(da$uniform_DIF), 1L)
+  # the within uniform test equals the person-level paired test (its gold
+  # standard) up to the class-interval filtering
+  z <- fit$residuals[, 3]; g <- factor(fit$factors$occasion); pid <- factor(id)
+  dp <- tapply(z[g == "t2"], pid[g == "t2"], mean) -
+        tapply(z[g == "t1"], pid[g == "t1"], mean)
+  expect_lt(abs(da$F_uniform[da$item == "I3"] -
+                t.test(dp)$statistic^2), 3)
+
+  # a cross-sectional design (unique ids) is unchanged: nothing within,
+  # and the ordinary between-subjects group DIF still flags the shifted item
+  set.seed(1); gg <- rep(c("a", "b"), each = 250)
+  sh <- matrix(0, 500, 8); sh[gg == "b", 3] <- 0.8
+  Xc <- matrix(rbinom(500 * 8, 1, plogis(outer(rnorm(500), d, "-") - sh)),
+               500, 8)
+  colnames(Xc) <- paste0("I", 1:8)
+  dc <- dif_anova(rasch(data.frame(Xc, grp = gg), factors = "grp"))
+  expect_length(attr(dc, "within"), 0L)
+  expect_false(any(dc$within))
+  expect_true(dc$uniform_DIF[dc$item == "I3"])
+})

@@ -41,6 +41,62 @@
   factor(ci)
 }
 
+# F, p and Sum Sq of a term, searched across the strata of a multi-stratum
+# aov summary (a within-subjects / mixed design)
+.aov_term <- function(sm, term) {
+  for (st in sm) {
+    tab <- st[[1L]]; rn <- trimws(rownames(tab))
+    if (term %in% rn)
+      return(c(F = tab[rn == term, "F value"], p = tab[rn == term, "Pr(>F)"],
+               ss = tab[rn == term, "Sum Sq"]))
+  }
+  c(F = NA_real_, p = NA_real_, ss = NA_real_)
+}
+.aov_resid_ss <- function(sm) {   # residual SS of the innermost (within) stratum
+  tab <- sm[[length(sm)]][[1L]]; rn <- trimws(rownames(tab))
+  if ("Residuals" %in% rn) tab[rn == "Residuals", "Sum Sq"] else NA_real_
+}
+
+# Within-subjects residual DIF for one within factor: a repeated-measures
+# (split-plot) analysis of variance with the person as the error stratum.
+# The class interval is taken at the person level so it is a clean
+# between-person (whole-plot) factor; the factor varies within person, so
+# its main effect (uniform DIF) and its interaction with the class interval
+# (non-uniform DIF) are tested against the within-person error.
+.dif_within <- function(z, g, ci, id) {
+  ok <- stats::complete.cases(z, g, ci, id)
+  z <- z[ok]; g <- droplevels(factor(g[ok])); ci <- droplevels(factor(ci[ok]))
+  id <- droplevels(factor(id[ok]))
+  if (nlevels(g) < 2L || length(z) < 10L) return(NULL)
+  single_ci <- nlevels(ci) < 2L
+  form <- if (single_ci) z ~ g + Error(id / g) else
+    z ~ ci * g + Error(id / g)
+  sm <- tryCatch(summary(stats::aov(form)), error = function(e) NULL)
+  if (is.null(sm)) return(NULL)
+  u <- .aov_term(sm, "g")
+  nu <- if (single_ci) c(F = NA_real_, p = NA_real_, ss = NA_real_) else
+    .aov_term(sm, "ci:g")
+  cl <- if (single_ci) c(F = NA_real_, p = NA_real_, ss = NA_real_) else
+    .aov_term(sm, "ci")
+  rss <- .aov_resid_ss(sm)
+  peta <- function(x) if (is.na(x["ss"]) || is.na(rss)) NA_real_ else
+    unname(x["ss"] / (x["ss"] + rss))
+  list(uniform = u[c("F", "p")], nonuniform = nu[c("F", "p")],
+       class = cl[c("F", "p")],
+       eta2_uniform = peta(u), eta2_nonuniform = peta(nu))
+}
+
+# Person-level class intervals for a within-subjects analysis: each person
+# gets one interval from their mean location, so the interval is a clean
+# whole-plot factor. Returned aligned to the rows of the fit.
+.dif_person_ci <- function(fit, id, n_groups) {
+  th <- fit$person$theta; ex <- fit$person$extreme
+  pth <- tapply(th, id, mean, na.rm = TRUE)
+  pex <- tapply(ex, id, function(v) all(v, na.rm = TRUE))
+  pci <- .class_intervals(as.numeric(pth), as.logical(pex), n_groups)
+  factor(pci[match(as.character(id), names(pth))])
+}
+
 #' Differential item functioning by two-way residual ANOVA
 #'
 #' For each item and each person factor separately, analyses the
@@ -68,6 +124,14 @@
 #'   discovery rate, \code{"holm"} or \code{"bonferroni"} the familywise
 #'   error rate.
 #' @param alpha Significance level applied to the adjusted probabilities.
+#' @param id Optional person identifier (a vector, or the name of a
+#'   nominated factor) for stacked repeated-measures designs. A factor whose
+#'   levels vary within a person is treated as within-subject and tested
+#'   with a person-clustered sandwich, so the within-person dependence the
+#'   between-subjects F ignores is respected. Defaults to the fit's own
+#'   person identifier, so a stacked design is handled automatically.
+#' @param within Optional names of factors to treat as within-subject;
+#'   auto-detected from \code{id} when not given.
 #' @return A data frame per item and factor with the full two-way table
 #'   (Andrich and Marais 2019, ch. 16): the group main effect (uniform
 #'   DIF), the
@@ -75,9 +139,11 @@
 #'   class-interval main effect, each with its F statistic; raw and
 #'   adjusted probabilities and flags for the two DIF terms; and partial
 #'   eta-squared effect sizes (\code{eta2_uniform}, \code{eta2_nonuniform}),
-#'   the proportion of residual-plus-effect variance the term accounts for.
-#'   For DIF magnitude on the logit scale, where practical significance is
-#'   judged, see \code{\link{dif_size}}.
+#'   the proportion of residual-plus-effect variance the term accounts for;
+#'   and a \code{within} indicator per factor. Factors treated as
+#'   within-subject are named in the \code{within} attribute. For DIF
+#'   magnitude on the logit scale, where practical significance is judged,
+#'   see \code{\link{dif_size}}.
 #' @examples
 #' set.seed(1); n <- 600
 #' d <- seq(-2, 2, length.out = 8); g <- rep(c("a", "b"), each = n / 2)
@@ -87,43 +153,82 @@
 #' dif_anova(rasch(X), factors = data.frame(group = g))
 #' @export
 dif_anova <- function(fit, factors = NULL, n_groups = NULL, p_adjust = "BH",
-                      alpha = 0.05) {
+                      alpha = 0.05, id = NULL, within = NULL) {
   Z <- fit$residuals; L <- ncol(Z)
   factors <- .dif_factors(fit, factors)
 
-  res <- list(); ng_used <- integer(0)
+  # person identifier for repeated-measures designs: a within-subject factor
+  # (the same person seen at several of its levels, as with occasion or
+  # time) breaks the independence the between-subjects F assumes, so it is
+  # tested against a person-blocked error stratum instead (a split plot:
+  # persons carry the class interval between, the factor varies within).
+  if (is.character(id) && length(id) == 1L && !is.null(fit$factors) &&
+      id %in% names(fit$factors)) id <- fit$factors[[id]]
+  if (is.null(id) && !is.null(fit$person$id)) id <- as.character(fit$person$id)
+  if (is.null(within) && !is.null(id) && anyDuplicated(id)) {
+    within <- names(factors)[vapply(names(factors), function(fn)
+      any(tapply(as.character(factors[[fn]]), id,
+                 function(v) length(unique(v)) > 1L)), TRUE)]
+  }
+  if (is.null(within)) within <- character(0)
+  within <- intersect(within, names(factors))
+
+  res <- list(); ng_used <- integer(0); within_used <- character(0)
   for (fname in names(factors)) {
     grp <- factor(factors[[fname]])
+    is_within <- fname %in% within
+    if (is_within) within_used <- c(within_used, fname)
     ng_f <- if (is.null(n_groups)) .dif_n_groups(fit, grp) else n_groups
     ng_used[fname] <- ng_f
-    ci <- .dif_class_intervals(fit, ng_f)
+    # between-subjects analyses stratify on the fit's own class intervals; a
+    # within-subjects factor needs a person-level interval (one per person)
+    # so the interval is a clean whole-plot factor in the repeated-measures
+    # analysis of variance
+    ci <- if (is_within) .dif_person_ci(fit, id, ng_f) else
+      .dif_class_intervals(fit, ng_f)
     out <- data.frame(factor = fname, item = colnames(Z),
                       F_uniform = NA_real_, p_uniform = NA_real_,
                       eta2_uniform = NA_real_,
                       F_nonuniform = NA_real_, p_nonuniform = NA_real_,
                       eta2_nonuniform = NA_real_,
-                      F_class = NA_real_, p_class = NA_real_)
+                      F_class = NA_real_, p_class = NA_real_,
+                      within = is_within)
     for (i in seq_len(L)) {
       d <- data.frame(z = Z[, i], g = grp, ci = ci)
+      if (is_within) d$id <- factor(id)
       d <- d[stats::complete.cases(d), ]
       if (nrow(d) < 10 || length(unique(d$g)) < 2) next
-      a <- tryCatch(stats::anova(stats::lm(z ~ g * ci, data = d)),
-                    error = function(e) NULL)
-      if (is.null(a)) next
-      rn <- rownames(a)
-      ss_res <- if ("Residuals" %in% rn) a["Residuals", "Sum Sq"] else NA_real_
-      peta <- function(term) a[term, "Sum Sq"] / (a[term, "Sum Sq"] + ss_res)
-      if ("g" %in% rn) {
-        out$F_uniform[i] <- a["g", "F value"]; out$p_uniform[i] <- a["g", "Pr(>F)"]
-        out$eta2_uniform[i] <- peta("g")
-      }
-      if ("g:ci" %in% rn) {
-        out$F_nonuniform[i] <- a["g:ci", "F value"]
-        out$p_nonuniform[i] <- a["g:ci", "Pr(>F)"]
-        out$eta2_nonuniform[i] <- peta("g:ci")
-      }
-      if ("ci" %in% rn) {
-        out$F_class[i] <- a["ci", "F value"]; out$p_class[i] <- a["ci", "Pr(>F)"]
+      if (is_within) {
+        # within-subjects factor: a repeated-measures (split-plot) analysis
+        # of variance with the person as the error stratum, so the uniform
+        # and non-uniform terms are tested against the within-person error
+        cl <- .dif_within(d$z, d$g, d$ci, d$id)
+        if (is.null(cl)) next
+        out$F_uniform[i] <- cl$uniform["F"]; out$p_uniform[i] <- cl$uniform["p"]
+        out$eta2_uniform[i] <- cl$eta2_uniform
+        out$F_nonuniform[i] <- cl$nonuniform["F"]
+        out$p_nonuniform[i] <- cl$nonuniform["p"]
+        out$eta2_nonuniform[i] <- cl$eta2_nonuniform
+        out$F_class[i] <- cl$class["F"]; out$p_class[i] <- cl$class["p"]
+      } else {
+        a <- tryCatch(stats::anova(stats::lm(z ~ g * ci, data = d)),
+                      error = function(e) NULL)
+        if (is.null(a)) next
+        rn <- rownames(a)
+        ss_res <- if ("Residuals" %in% rn) a["Residuals", "Sum Sq"] else NA_real_
+        peta <- function(term) a[term, "Sum Sq"] / (a[term, "Sum Sq"] + ss_res)
+        if ("g" %in% rn) {
+          out$F_uniform[i] <- a["g", "F value"]; out$p_uniform[i] <- a["g", "Pr(>F)"]
+          out$eta2_uniform[i] <- peta("g")
+        }
+        if ("g:ci" %in% rn) {
+          out$F_nonuniform[i] <- a["g:ci", "F value"]
+          out$p_nonuniform[i] <- a["g:ci", "Pr(>F)"]
+          out$eta2_nonuniform[i] <- peta("g:ci")
+        }
+        if ("ci" %in% rn) {
+          out$F_class[i] <- a["ci", "F value"]; out$p_class[i] <- a["ci", "Pr(>F)"]
+        }
       }
     }
     out$p_uniform_adj <- p.adjust(out$p_uniform, method = p_adjust)
@@ -136,6 +241,7 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL, p_adjust = "BH",
   out <- do.call(rbind, res)
   rownames(out) <- NULL
   attr(out, "n_groups") <- ng_used
+  attr(out, "within") <- within_used
   out
 }
 

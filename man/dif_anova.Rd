@@ -4,7 +4,15 @@
 \alias{dif_anova}
 \title{Differential item functioning by two-way residual ANOVA}
 \usage{
-dif_anova(fit, factors = NULL, n_groups = NULL, p_adjust = "BH", alpha = 0.05)
+dif_anova(
+  fit,
+  factors = NULL,
+  n_groups = NULL,
+  p_adjust = "BH",
+  alpha = 0.05,
+  id = NULL,
+  within = NULL
+)
 }
 \arguments{
 \item{fit}{A fitted object from \code{\link{rasch}}.}
@@ -27,6 +35,16 @@ discovery rate, \code{"holm"} or \code{"bonferroni"} the familywise
 error rate.}
 
 \item{alpha}{Significance level applied to the adjusted probabilities.}
+
+\item{id}{Optional person identifier (a vector, or the name of a
+nominated factor) for stacked repeated-measures designs. A factor whose
+levels vary within a person is treated as within-subject and tested
+with a person-clustered sandwich, so the within-person dependence the
+between-subjects F ignores is respected. Defaults to the fit's own
+person identifier, so a stacked design is handled automatically.}
+
+\item{within}{Optional names of factors to treat as within-subject;
+auto-detected from \code{id} when not given.}
 }
 \value{
 A data frame per item and factor with the full two-way table
@@ -36,9 +54,11 @@ A data frame per item and factor with the full two-way table
   class-interval main effect, each with its F statistic; raw and
   adjusted probabilities and flags for the two DIF terms; and partial
   eta-squared effect sizes (\code{eta2_uniform}, \code{eta2_nonuniform}),
-  the proportion of residual-plus-effect variance the term accounts for.
-  For DIF magnitude on the logit scale, where practical significance is
-  judged, see \code{\link{dif_size}}.
+  the proportion of residual-plus-effect variance the term accounts for;
+  and a \code{within} indicator per factor. Factors treated as
+  within-subject are named in the \code{within} attribute. For DIF
+  magnitude on the logit scale, where practical significance is judged,
+  see \code{\link{dif_size}}.
 }
 \description{
 For each item and each person factor separately, analyses the

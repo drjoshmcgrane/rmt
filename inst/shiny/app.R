@@ -888,8 +888,6 @@ panel_dif <- nav_panel("DIF", value = "p_dif", icon = bs_icon("sliders"),
           radioButtons("dif_effects", "Model",
                        c("Full factorial" = "factorial",
                          "Main effects only" = "main"))),
-        selectizeInput("dif_item", "Item for ICC by group", NULL,
-                       options = list(placeholder = "run an analysis first")),
         numericInput("dif_alpha", "Significance level (alpha)", value = 0.05,
                      min = 0.001, max = 0.5, step = 0.01),
         selectInput("dif_padj", "Multiplicity adjustment",
@@ -898,7 +896,7 @@ panel_dif <- nav_panel("DIF", value = "p_dif", icon = bs_icon("sliders"),
                       "Bonferroni" = "bonferroni",
                       "None" = "none")),
         p(class = "text-muted small",
-          "ANOVA of standardised residuals: factor effects = uniform DIF; factor x class-interval terms = non-uniform DIF. Probabilities are adjusted across items by the chosen method. With several factors, choose the factorial option to model them jointly: significant interactions supersede their main effects, and Tukey HSD compares the levels of each significant group term."),
+          "ANOVA of standardised residuals: factor effects = uniform DIF; factor x class-interval terms = non-uniform DIF. Probabilities are adjusted across items by the chosen method. With several factors, choose the factorial option to model them jointly: significant interactions supersede their main effects, and the pairwise comparisons resolve the levels of the selected term."),
         hr(),
         conditionalPanel("input.dif_factor != '(all factors: factorial)'",
           input_task_button("make_split", "Resolve: split this item by this factor",
@@ -910,38 +908,30 @@ panel_dif <- nav_panel("DIF", value = "p_dif", icon = bs_icon("sliders"),
           layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
             tableCard("dif_tbl",
               controls = cols_switch("dif_full"),
-                      info = "ANOVA of standardised residuals: a significant factor effect indicates uniform DIF, a significant factor-by-class-interval interaction indicates non-uniform DIF (Andrich & Marais 2019). Click a row to draw that item's characteristic curves by group on the right.",
+                      info = "ANOVA of standardised residuals: a significant factor effect indicates uniform DIF, a significant factor-by-class-interval interaction indicates non-uniform DIF (Andrich & Marais 2019). Click a row to see that item's characteristic curves by group (right) and, below, the pairwise comparisons for the selected item and term.",
                       footer = uiOutput("dif_note")),
             plotCard("dif_icc", "Characteristic curves by group",
-              info = "The item characteristic curve drawn separately for each level of the person factor (in factorial mode, each factor-combination cell), with the observed class-interval means overlaid: the graphical display of DIF for the item selected in the table."))),
+              info = "The item characteristic curve drawn separately for each level of the person factor (in factorial mode, each factor-combination cell), with the observed class-interval means overlaid: the graphical display of DIF for the item of the selected table row."))),
         # collapsed by default: the DT output suspends while hidden, so the
         # per-item terms table is only computed when the panel is first opened
         accordion_panel("Full ANOVA table", value = "dif_full_panel",
           tableCard("dif_full_tbl",
                     note = "The complete per-item ANOVA: every model term with its df, sums of squares, mean squares, F, and adjusted probability.")),
-        accordion_panel("DIF magnitude in logits", value = "dif_size_panel",
+        accordion_panel("Pairwise comparisons", value = "dif_pairwise",
           card(card_body(fillable = FALSE,
                  p(class = "text-muted",
-                   "Resolves the selected item by the selected factor (in factorial mode: by every significant, non-superseded group term) and reports pairwise location differences in logits with Holm familywise adjustment. Differences of at least the criterion are flagged as practically significant."),
-                 layout_columns(col_widths = c(3, 3, 3, 3),
+                   "Resolves the item of the selected analysis-of-variance row by that row's factor (interaction rows resolve by the interaction cells) and reports the pairwise location differences in logits - the DIF magnitude - with Holm familywise adjustment. A two-level factor gives the single magnitude row."),
+                 layout_columns(col_widths = c(4, 4, 4),
                    numericInput("dif_size_flag", "Practical criterion (logits)",
                                 0.5, min = 0.1, step = 0.1),
-                   numericInput("dif_size_minn", "Min responders per level", 20,
+                   numericInput("dif_size_minn", "Min responders", 20,
                                 min = 5, step = 5),
-                   div(class = "mt-4",
-                       input_task_button("dif_size_go", "Compute DIF size",
-                                         type = "primary")),
-                   conditionalPanel("output.has_difsize == true", class = "mt-4",
-                     div(class = "d-flex align-items-center gap-3",
-                         cols_switch("difsize_full"),
-                         downloadButton("dl_dif_size", "CSV",
-                                        class = "btn-outline-secondary btn-xs")))),
-                 conditionalPanel("output.has_difsize != true",
-                   p(class = "text-muted small mb-0",
-                     "Run to see the resolved magnitudes.")),
-                 conditionalPanel("output.has_difsize == true",
-                   DT::DTOutput("dif_size_tbl"),
-                   rcode_details("dif_size_tbl"))))),
+                   div(class = "mt-4 d-flex justify-content-end align-items-start",
+                       downloadButton("dl_dif_size", "CSV",
+                                      class = "btn-outline-secondary btn-xs"))),
+                 uiOutput("dif_levels_note"),
+                 DT::DTOutput("dif_size_tbl"),
+                 rcode_details("dif_size_tbl")))),
         accordion_panel(
           title = span("Planned contrasts",
                        info_icon("Planned one-degree-of-freedom questions derived from the factor structure, tested with familywise control over the small planned family instead of all cell pairs (Maxwell & Delaney 2004). Estimates are DIF magnitudes in logits from resolved item locations. With a person ID and repeated rows, time-like factors are treated within-subjects via person-level residual scores.")),
@@ -967,14 +957,7 @@ panel_dif <- nav_panel("DIF", value = "p_dif", icon = bs_icon("sliders"),
                        downloadButton("contr_tbl_csv", "CSV",
                                       class = "btn-outline-secondary btn-xs")),
                    DT::DTOutput("contr_tbl"),
-                   rcode_details("contr_tbl"))))),
-        accordion_panel("Pairwise comparisons (Tukey)", value = "dif_tukey",
-          conditionalPanel("output.dif_is_factorial == true",
-            tableCard("dif_tukey_tbl",
-                      note = "Pairwise level comparisons for significant, non-superseded group terms (factorial mode).")),
-          conditionalPanel("output.dif_is_factorial != true",
-            p(class = "text-muted",
-              "Choose the factorial option in the sidebar to see Tukey HSD comparisons."))))
+                   rcode_details("contr_tbl"))))))
     )),
     # paired-comparison (BTL) fits: differential object functioning by
     # judge group (Bradley-Terry counterpart of the person-factor analysis)
@@ -1992,8 +1975,6 @@ server <- function(input, output, session) {
   # ------------------------------------------------ UI visibility flags --
   # "nothing to show" areas hide instead of rendering empty; each flag pairs
   # with a conditionalPanel in the UI (same pattern as has_mc)
-  output$dif_is_factorial <- reactive(identical(input$dif_factor, FACTORIAL))
-  outputOptions(output, "dif_is_factorial", suspendWhenHidden = FALSE)
   output$has_interaction <- reactive({
     f <- tryCatch(fit(), error = function(e) NULL)
     inherits(f, "rasch_mfrm") && !is.null(f$interaction)
@@ -2014,8 +1995,6 @@ server <- function(input, output, session) {
   outputOptions(output, "has_dep", suspendWhenHidden = FALSE)
   output$has_spread <- reactive(!is.null(spread_res()))
   outputOptions(output, "has_spread", suspendWhenHidden = FALSE)
-  output$has_difsize <- reactive(!is.null(dif_size_res()))
-  outputOptions(output, "has_difsize", suspendWhenHidden = FALSE)
   output$has_contr <- reactive(!is.null(contr_res()))
   outputOptions(output, "has_contr", suspendWhenHidden = FALSE)
   output$has_dm <- reactive(!is.null(dm_res()))
@@ -2035,7 +2014,6 @@ server <- function(input, output, session) {
 
   observeEvent(fit(), {
     its <- fit()$items$item
-    updateSelectInput(session, "dif_item", choices = its, selected = its[1])
     updateSelectizeInput(session, "subtest_items", choices = its, selected = character(0))
     fac <- names(fit()$factors)
     dif_choices <- if (length(fac)) c(fac, FACTORIAL) else character(0)
@@ -2069,7 +2047,7 @@ server <- function(input, output, session) {
                                 ceiling((r[2] + 0.4) * 2) / 2))
     # results computed on request belong to the fit they came from
     lr_res(NULL); dep_res(NULL); spread_res(NULL); dm_res(NULL); guess_res(NULL)
-    contr_res(NULL); rescore_res(NULL); dif_size_res(NULL)
+    contr_res(NULL); rescore_res(NULL)
     # manual dimensionality subsets too: they name items of the previous fit
     dim_subsets(NULL)
   })
@@ -2094,18 +2072,19 @@ server <- function(input, output, session) {
 
   observeEvent(input$make_split, {
     f <- fit()
-    req(input$dif_item %in% f$items$item,
+    it <- dif_sel_item()
+    req(it %in% f$items$item,
         !is.null(f$factors), input$dif_factor %in% names(f$factors))
-    res <- tryCatch(split_items(f, input$dif_item, by = input$dif_factor),
+    res <- tryCatch(split_items(f, it, by = input$dif_factor),
                     error = function(e) e)
     if (inherits(res, "error")) {
       showNotification(paste("Split failed:", conditionMessage(res)), type = "error")
     } else {
       override_fit(res)
-      override_desc(sprintf("split: item %s by %s", input$dif_item, input$dif_factor))
+      override_desc(sprintf("split: item %s by %s", it, input$dif_factor))
       showNotification(
         sprintf("Re-analysed with %s split by %s. Reset the override (Data page) or run again to return to the base fit.",
-                input$dif_item, input$dif_factor),
+                it, input$dif_factor),
         type = "message", duration = 8)
     }
   })
@@ -2183,21 +2162,16 @@ server <- function(input, output, session) {
               "chisq", "df", "p_adj"),
     person = c("id", "raw", "max_raw", "theta", "se", "extreme", "fit_resid"),
     dif = c("factor", "item", "F_uniform", "p_uniform_adj", "eta2_uniform",
-            "F_nonuniform", "p_nonuniform_adj", "eta2_nonuniform",
-            "uniform_DIF", "nonuniform_DIF"),
+            "F_nonuniform", "p_nonuniform_adj", "eta2_nonuniform"),
     dif_fact = c("item", "term", "F_uniform", "p_uniform_adj", "eta2_uniform",
-                 "uniform_DIF", "F_nonuniform", "p_nonuniform_adj",
-                 "eta2_nonuniform", "nonuniform_DIF"),
+                 "F_nonuniform", "p_nonuniform_adj", "eta2_nonuniform"),
     facet = c("level", "severity", "se", "n", "fit_resid"),
     btl_obj = c("object", "location", "se", "comparisons", "wins", "score",
                 "fit_resid"),
     btl_judge = c("judge", "n", "fit_resid", "misfit"),
     equate = c("item", "location_1", "location_2", "adj_difference", "t",
                "p_adj", "drift"),
-    dif_size = c("item", "term", "level_a", "level_b", "difference", "lower",
-                 "upper", "p_adj", "significant", "practical"),
-    contrast = c("item", "contrast", "estimate", "se", "statistic", "p_adj",
-                 "significant", "practical"),
+    contrast = c("item", "contrast", "estimate", "se", "statistic", "p_adj"),
     frames = c("set", "group", "rho", "se_log_rho", "origin", "fit_resid",
                "n_responses"),
     compare = c("label", "model", "persons", "items", "two_delta_ll",
@@ -2291,6 +2265,24 @@ server <- function(input, output, session) {
                         fontWeight = styleInterval(0.05, c("bold", "normal")))
     dt
   }
+  # Red-highlight a triggering value in place of a boolean flag column (the
+  # items table pattern): colour the cell with the theme danger colour when
+  # it crosses the threshold, leaving in-range values at the inherited text
+  # colour. `d` is the DISPLAYED data frame, so column positions match the
+  # rendered table; each helper is a no-op when the column is absent.
+  DANGER <- "var(--bs-danger)"
+  style_lo_red <- function(dt, d, col, cut)     # red when value < cut (e.g. p)
+    Reduce(function(x, j) formatStyle(x, j,
+      color = styleInterval(cut, c(DANGER, "inherit"))),
+      which(names(d) == col), dt)
+  style_hi_red <- function(dt, d, col, cut)     # red when value > cut
+    Reduce(function(x, j) formatStyle(x, j,
+      color = styleInterval(cut, c("inherit", DANGER))),
+      which(names(d) == col), dt)
+  style_mag_red <- function(dt, d, col, mag)    # red when |value| >= mag
+    Reduce(function(x, j) formatStyle(x, j,
+      color = styleInterval(c(-mag, mag), c(DANGER, "inherit", DANGER))),
+      which(names(d) == col), dt)
 
   # ------------------------------------------------- navbar status chips --
   # compact badges once a fit exists: model, N persons, N items, PSI
@@ -2860,20 +2852,20 @@ server <- function(input, output, session) {
     if (identical(input$dif_factor, FACTORIAL)) {
       d <- curate(dif_fact()$summary, "dif_fact",
                   full = isTRUE(input$dif_full))
-      d$uniform_DIF <- ifelse(d$uniform_DIF, "*", "")
-      d$nonuniform_DIF <- ifelse(d$nonuniform_DIF, "*", "")
       if ("superseded" %in% names(d))
         d$superseded <- ifelse(d$superseded, "(superseded)", "")
-      num_dt(d, selection = "single")
+      dt <- num_dt(d, selection = "single")
     } else {
       d <- dif_res()
       if (!is.null(input$dif_factor) && input$dif_factor %in% d$factor)
         d <- d[d$factor == input$dif_factor, ]
       d <- curate(d, "dif", full = isTRUE(input$dif_full))
-      d$uniform_DIF <- ifelse(d$uniform_DIF, "*", "")
-      d$nonuniform_DIF <- ifelse(d$nonuniform_DIF, "*", "")
-      num_dt(d, selection = "single")
+      dt <- num_dt(d, selection = "single")
     }
+    # no boolean DIF flag columns: the adjusted probability turns red when it
+    # crosses alpha (uniform = factor effect, non-uniform = factor x interval)
+    dt <- style_lo_red(dt, d, "p_uniform_adj", dif_alpha())
+    style_lo_red(dt, d, "p_nonuniform_adj", dif_alpha())
   }, code = function() {
     if (identical(input$dif_factor, FACTORIAL))
       sprintf('dif_anova_factorial(fit, effects = "%s", p_adjust = "%s", alpha = %s)$summary',
@@ -2899,9 +2891,9 @@ server <- function(input, output, session) {
   })
   register_table("dif_full_tbl", function() dif_full_dat(), function() {
     d <- dif_full_dat()
-    d$significant <- ifelse(d$significant, "*", "")
+    d$significant <- NULL                     # red adjusted p replaces the flag
     d$superseded <- ifelse(d$superseded, "(superseded)", "")
-    num_dt(d)
+    style_lo_red(num_dt(d), d, "p_adj", dif_alpha())
   }, code = function() {
     if (identical(input$dif_factor, FACTORIAL))
       sprintf('dif_anova_factorial(fit, effects = "%s", p_adjust = "%s", alpha = %s)$terms',
@@ -2935,22 +2927,11 @@ server <- function(input, output, session) {
              paste(parts, collapse = "; "), ".", ci_txt)
     }
   })
-  register_table("dif_tukey_tbl", function() dif_fact()$tukey, function() {
-    validate(need(identical(input$dif_factor, FACTORIAL),
-                  "Choose the factorial option in the sidebar to see Tukey HSD comparisons."))
-    tk <- dif_fact()$tukey
-    if (!nrow(tk))
-      return(datatable(data.frame(note = "no significant group terms to compare"),
-                       rownames = FALSE, style = "bootstrap5",
-                       class = "table-sm compact",
-                       options = list(dom = "t")))
-    num_dt(tk)
-  }, code = function() "dif_anova_factorial(fit)$tukey")
-  # clicking a row of the DIF summary points the group-ICC (and the split /
-  # magnitude tools) at that item: the items in the ROW ORDER of the table
-  # actually rendered (single-factor mode filters dif_res by the chosen
-  # factor; curate only drops columns, so the row order is preserved), then
-  # sync the sidebar item selector so it stays a live fallback
+  # the items of the DIF summary in the ROW ORDER of the table actually
+  # rendered (single-factor mode filters dif_res by the chosen factor; curate
+  # only drops columns, so the row order is preserved). The selected row drives
+  # the group-ICC and the pairwise-comparisons panel; nothing selected defaults
+  # to the top row.
   dif_tbl_items <- reactive({
     if (identical(input$dif_factor, FACTORIAL)) dif_fact()$summary$item
     else {
@@ -2960,13 +2941,24 @@ server <- function(input, output, session) {
       d$item
     }
   })
-  observeEvent(input$dif_tbl_rows_selected, {
+  # the item and term of the currently selected summary row (top row by
+  # default); the term's factor variables (":"-separated for interactions)
+  # feed dif_size and the group-ICC
+  dif_sel_row <- reactive({
+    r <- input$dif_tbl_rows_selected
     its <- dif_tbl_items()
-    r <- input$dif_tbl_rows_selected[1]
-    if (length(r) && !is.na(r) && r <= length(its) &&
-        !identical(input$dif_item, its[r]))
-      updateSelectizeInput(session, "dif_item", selected = its[r])
+    if (length(r) && !is.na(r[1]) && r[1] >= 1 && r[1] <= length(its))
+      r[1] else 1L
   })
+  dif_sel_item <- reactive({
+    its <- dif_tbl_items(); req(length(its) >= 1); its[dif_sel_row()]
+  })
+  dif_sel_term <- reactive({
+    if (identical(input$dif_factor, FACTORIAL)) {
+      tm <- dif_fact()$summary$term; req(length(tm) >= 1); tm[dif_sel_row()]
+    } else { req(nzchar(input$dif_factor %||% "")); input$dif_factor }
+  })
+  dif_sel_vars <- reactive(strsplit(dif_sel_term(), ":", fixed = TRUE)[[1]])
   # in factorial mode the graphical display uses the factor-combination
   # cells; plot_icc accepts several factor names for exactly this
   dif_icc_group <- function(f) {
@@ -2975,69 +2967,60 @@ server <- function(input, output, session) {
   }
   register_plot("dif_icc", function() {
     f <- fit()
-    req(input$dif_item %in% f$items$item, !is.null(f$factors))
-    plot_icc(f, input$dif_item, group = dif_icc_group(f))
+    req(dif_sel_item() %in% f$items$item, !is.null(f$factors))
+    plot_icc(f, dif_sel_item(), group = dif_icc_group(f))
   }, code = function() {
     g <- if (identical(input$dif_factor, FACTORIAL))
       paste0('c("', paste(names(fit()$factors), collapse = '", "'), '")')
     else sprintf('"%s"', input$dif_factor %||% "")
-    sprintf('plot_icc(fit, "%s", group = %s)', input$dif_item %||% "", g)
+    sprintf('plot_icc(fit, "%s", group = %s)', dif_sel_item() %||% "", g)
   })
 
-  # DIF magnitude in logits: single factor -> the selected item and factor;
-  # factorial -> sizes for every significant, non-superseded group term
-  dif_size_res <- reactiveVal(NULL)
-  observeEvent(input$dif_size_go, {
-    f <- fit()
+  # Pairwise comparisons for the selected DIF row: the row's item resolved by
+  # the row's term (interaction terms resolve by their cells), giving the
+  # pairwise location differences in logits (the DIF magnitude) with Holm
+  # familywise adjustment. Recomputes on row selection and the two criteria.
+  dif_size_res <- reactive({
+    f <- fit(); req(!is.null(f$factors))
+    vars <- dif_sel_vars(); req(length(vars) >= 1, all(vars %in% names(f$factors)))
+    req(dif_sel_item() %in% f$items$item)
     flg <- max(0.05, input$dif_size_flag %||% 0.5)
     mn <- max(2, input$dif_size_minn %||% 20)
-    res <- tryCatch({
-      if (identical(input$dif_factor, FACTORIAL)) {
-        fa <- dif_anova_factorial(f, sizes = TRUE,
-                                  p_adjust = input$dif_padj %||% "BH",
-                                  alpha = dif_alpha(),
-                                  effects = input$dif_effects %||% "factorial")
-        sz <- fa$sizes
-        if (is.null(sz) || !nrow(sz))
-          stop("no significant, non-superseded group terms to size")
-        sz$practical <- abs(sz$difference) >= flg
-        sz
-      } else {
-        req(input$dif_item %in% f$items$item,
-            input$dif_factor %in% names(f$factors))
-        ds <- dif_size(f, input$dif_item, by = input$dif_factor,
-                       flag_logits = flg, min_n = mn)
-        cbind(item = ds$item, term = ds$by, ds$pairs)
-      }
-    }, error = function(e) e)
-    if (inherits(res, "error")) {
-      showNotification(paste("DIF size:", conditionMessage(res)),
-                       type = "warning")
-      dif_size_res(NULL)
-    } else dif_size_res(res)
+    tryCatch(dif_size(f, dif_sel_item(), by = vars,
+                      flag_logits = flg, min_n = mn, alpha = dif_alpha()),
+             error = function(e) e)
   })
+  # the resolved-location summary above the pairwise table; a muted line
+  # appears only when dif_size genuinely errors (e.g. too few responders)
+  output$dif_levels_note <- renderUI({
+    ds <- dif_size_res()
+    if (inherits(ds, "error"))
+      return(p(class = "text-muted small mb-0", conditionMessage(ds)))
+    p(class = "text-muted small mb-2",
+      sprintf("%s resolved by %s: %s.", ds$item, ds$by,
+              paste(sprintf("%s %.2f", ds$levels$level, ds$levels$location),
+                    collapse = ", ")))
+  })
+  # always the pairwise magnitude table when dif_size succeeds: one row for a
+  # two-level factor (the single effect size), more for > 2 levels
   output$dif_size_tbl <- DT::renderDT({
-    d <- dif_size_res()
-    validate(need(!is.null(d), "Compute DIF sizes to see the logit-scale comparisons."))
-    d <- curate(d, "dif_size", full = isTRUE(input$difsize_full))
-    if ("significant" %in% names(d))
-      d$significant <- ifelse(d$significant, "*", "")
-    if ("practical" %in% names(d))
-      d$practical <- ifelse(d$practical, "PRACTICAL", "")
-    num_dt(d)
+    ds <- dif_size_res()
+    req(!inherits(ds, "error"))
+    d <- ds$pairs[, c("level_a", "level_b", "difference", "se", "z",
+                      "lower", "upper", "p_adj")]
+    dt <- style_mag_red(num_dt(d), d, "difference", ds$flag_logits)
+    style_lo_red(dt, d, "p_adj", ds$alpha)
   })
-  register_code("dif_size_tbl", function() {
-    if (identical(input$dif_factor, FACTORIAL))
-      "dif_anova_factorial(fit, sizes = TRUE)$sizes"
-    else sprintf('dif_size(fit, "%s", by = "%s")',
-                 input$dif_item %||% "", input$dif_factor %||% "")
-  })
+  register_code("dif_size_tbl", function()
+    sprintf('dif_size(fit, "%s", by = %s)', dif_sel_item() %||% "",
+            if (length(dif_sel_vars()) == 1L) qstr(dif_sel_vars())
+            else qvec(dif_sel_vars())))
   output$dl_dif_size <- downloadHandler(
     filename = function() "dif_sizes.csv",
     content = function(file) {
-      d <- dif_size_res()
-      if (is.null(d)) stop("compute DIF sizes first")
-      write.csv(d, file, row.names = FALSE)
+      ds <- dif_size_res()
+      if (inherits(ds, "error")) stop(conditionMessage(ds))
+      write.csv(ds$pairs, file, row.names = FALSE)
     })
 
   # planned DIF contrasts: the family is derived from the factor structure
@@ -3089,12 +3072,11 @@ server <- function(input, output, session) {
     validate(need(!is.null(r),
                   "Press the button to derive the planned family from the factor structure and test it."))
     d <- curate(r$table, "contrast", full = isTRUE(input$contr_full))
-    if ("significant" %in% names(d))
-      d$significant <- ifelse(d$significant, "*", "")
-    if ("practical" %in% names(d))
-      d$practical <- ifelse(d$practical, "PRACTICAL", "")
     if ("within" %in% names(d)) d$within <- ifelse(d$within, "*", "")
-    num_dt(d)
+    # no significant/practical flags: the estimate turns red at the practical
+    # criterion, the adjusted p at alpha
+    dt <- style_mag_red(num_dt(d), d, "estimate", r$flag_logits %||% 0.5)
+    style_lo_red(dt, d, "p_adj", r$alpha %||% 0.05)
   }, code = function() {
     its <- input$pc_items
     sprintf('dif_contrasts(fit%s%s)',
@@ -3343,12 +3325,11 @@ server <- function(input, output, session) {
     validate(need(!is.null(r),
                   "Choose a judge factor in the sidebar and run the DIF analysis."))
     d <- r$anova[, intersect(c("object", "n", "F_uniform", "p_uniform_adj",
-                               "uniform_DIF", "F_nonuniform",
-                               "p_nonuniform_adj", "nonuniform_DIF"),
+                               "F_nonuniform", "p_nonuniform_adj"),
                              names(r$anova)), drop = FALSE]
-    d$uniform_DIF <- ifelse(d$uniform_DIF, "*", "")
-    d$nonuniform_DIF <- ifelse(d$nonuniform_DIF, "*", "")
-    num_dt(d)
+    # no boolean DIF flags: the adjusted probabilities turn red at alpha
+    dt <- style_lo_red(num_dt(d), d, "p_uniform_adj", bdif_alpha())
+    style_lo_red(dt, d, "p_nonuniform_adj", bdif_alpha())
   }, code = function()
     paste0("# dat: the comparison data; bt: the fit from the Data page\n",
            bdif_code_grp(), "\n",
@@ -3363,11 +3344,12 @@ server <- function(input, output, session) {
     validate(need(!is.null(r$sizes),
                   "No object could be resolved by this grouping (see the notes on the analysis-of-variance panel)."))
     d <- r$sizes[, intersect(c("object", "level_a", "level_b", "difference",
-                               "se", "z", "p_adj", "significant",
-                               "practical"), names(r$sizes)), drop = FALSE]
-    d$significant <- ifelse(d$significant, "*", "")
-    d$practical <- ifelse(d$practical, "PRACTICAL", "")
-    num_dt(d)
+                               "se", "z", "p_adj"),
+                             names(r$sizes)), drop = FALSE]
+    # no significant/practical flags: the difference turns red at 0.5 logits,
+    # the adjusted p at alpha
+    dt <- style_mag_red(num_dt(d), d, "difference", 0.5)
+    style_lo_red(dt, d, "p_adj", bdif_alpha())
   }, code = function()
     paste0(bdif_code_grp(), "\n",
            sprintf("btl_dif(bt, groups = grp, alpha = %s)$sizes",
@@ -3666,8 +3648,8 @@ server <- function(input, output, session) {
   # average off-diagonal Q3, and pairs above the flag threshold are starred
   output$rpairs_tbl <- renderDT({
     d <- ld_res()$pairs
-    d$flagged <- ifelse(d$flagged, "*", "")
-    num_dt(d)
+    d$flagged <- NULL                        # red Q3* above the flag replaces it
+    style_hi_red(num_dt(d), d, "q3_star", ld_flag())
   })
   register_code("rpairs_tbl", function()
     sprintf("residual_correlations(fit, flag = %s)$pairs", ld_flag()))
