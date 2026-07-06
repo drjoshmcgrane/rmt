@@ -13,7 +13,15 @@ which models them jointly.
 ## Usage
 
 ``` r
-dif_anova(fit, factors = NULL, n_groups = NULL, p_adjust = "BH", alpha = 0.05)
+dif_anova(
+  fit,
+  factors = NULL,
+  n_groups = NULL,
+  p_adjust = "BH",
+  alpha = 0.05,
+  id = NULL,
+  within = NULL
+)
 ```
 
 ## Arguments
@@ -48,6 +56,20 @@ dif_anova(fit, factors = NULL, n_groups = NULL, p_adjust = "BH", alpha = 0.05)
 
   Significance level applied to the adjusted probabilities.
 
+- id:
+
+  Optional person identifier (a vector, or the name of a nominated
+  factor) for stacked repeated-measures designs. A factor whose levels
+  vary within a person is treated as within-subject and tested with a
+  person-clustered sandwich, so the within-person dependence the
+  between-subjects F ignores is respected. Defaults to the fit's own
+  person identifier, so a stacked design is handled automatically.
+
+- within:
+
+  Optional names of factors to treat as within-subject; auto-detected
+  from `id` when not given.
+
 ## Value
 
 A data frame per item and factor with the full two-way table (Andrich
@@ -56,8 +78,10 @@ group-by-interval interaction (non-uniform DIF), and the class-interval
 main effect, each with its F statistic; raw and adjusted probabilities
 and flags for the two DIF terms; and partial eta-squared effect sizes
 (`eta2_uniform`, `eta2_nonuniform`), the proportion of
-residual-plus-effect variance the term accounts for. For DIF magnitude
-on the logit scale, where practical significance is judged, see
+residual-plus-effect variance the term accounts for; and a `within`
+indicator per factor. Factors treated as within-subject are named in the
+`within` attribute. For DIF magnitude on the logit scale, where
+practical significance is judged, see
 [`dif_size`](https://drjoshmcgrane.github.io/rmt/reference/dif_size.md).
 
 ## Examples
@@ -78,15 +102,15 @@ dif_anova(rasch(X), factors = data.frame(group = g))
 #> 6  group   I6  1.4228990 2.334275e-01 0.0025120789    0.2161082   0.97167194
 #> 7  group   I7  2.4010934 1.218104e-01 0.0042317392    1.6026234   0.14403948
 #> 8  group   I8  0.1780050 6.732539e-01 0.0003149538    1.2077998   0.30043851
-#>   eta2_nonuniform   F_class    p_class p_uniform_adj p_nonuniform_adj
-#> 1     0.010875695 0.5516798 0.76877969  6.919910e-01        0.6418175
-#> 2     0.001698031 1.5486895 0.16004610  6.808372e-01        0.9869547
-#> 3     0.019535788 1.3859574 0.21800630  1.408676e-06        0.3311450
-#> 4     0.004549799 0.8863650 0.50446152  6.808372e-01        0.9869547
-#> 5     0.025410743 1.1171114 0.35078915  1.818699e-02        0.1892905
-#> 6     0.002289699 0.8543115 0.52841764  4.668550e-01        0.9869547
-#> 7     0.016734209 2.8661923 0.00928187  3.248277e-01        0.3841053
-#> 8     0.012663765 0.5068670 0.80333411  6.919910e-01        0.6008770
+#>   eta2_nonuniform   F_class    p_class within p_uniform_adj p_nonuniform_adj
+#> 1     0.010875695 0.5516798 0.76877969  FALSE  6.919910e-01        0.6418175
+#> 2     0.001698031 1.5486895 0.16004610  FALSE  6.808372e-01        0.9869547
+#> 3     0.019535788 1.3859574 0.21800630  FALSE  1.408676e-06        0.3311450
+#> 4     0.004549799 0.8863650 0.50446152  FALSE  6.808372e-01        0.9869547
+#> 5     0.025410743 1.1171114 0.35078915  FALSE  1.818699e-02        0.1892905
+#> 6     0.002289699 0.8543115 0.52841764  FALSE  4.668550e-01        0.9869547
+#> 7     0.016734209 2.8661923 0.00928187  FALSE  3.248277e-01        0.3841053
+#> 8     0.012663765 0.5068670 0.80333411  FALSE  6.919910e-01        0.6008770
 #>   uniform_DIF nonuniform_DIF
 #> 1       FALSE          FALSE
 #> 2       FALSE          FALSE
