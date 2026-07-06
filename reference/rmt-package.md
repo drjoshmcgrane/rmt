@@ -15,6 +15,16 @@ modern Shiny interface
 and a one-call exporter
 ([`save_outputs`](https://drjoshmcgrane.github.io/rmt/reference/save_outputs.md)).
 
+## See also
+
+Useful links:
+
+- <https://drjoshmcgrane.github.io/rmt/>
+
+- <https://github.com/drjoshmcgrane/rmt>
+
+- Report bugs at <https://github.com/drjoshmcgrane/rmt/issues>
+
 ## Author
 
 **Maintainer**: Josh McGrane <drjoshmcgrane@gmail.com>
