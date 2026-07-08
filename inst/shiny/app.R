@@ -299,6 +299,9 @@ theme <- bs_theme(
 
 css <- HTML("
   .navbar-brand { font-weight: 700; letter-spacing: .02em; }
+  .app-brand-tag { font-weight: 400; opacity: .6; font-size: .82rem; }
+  /* drop the tagline before it can crowd the nav items */
+  @media (max-width: 1300px) { .app-brand-tag { display: none; } }
   .card-header { font-weight: 600; }
   .value-box-title { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
   .value-box-value { font-size: 1.45rem; }
@@ -1386,7 +1389,8 @@ panel_export <- nav_panel("Export", value = "p_export", icon = bs_icon("download
 # the navbar.
 ui <- page_navbar(
   id = "nav",
-  title = span("rasch"),
+  title = span("rasch",
+               span(" — Rasch Measurement Theory", class = "app-brand-tag")),
   theme = theme,
   # normal scrolling pages: never compress content to fit the viewport
   fillable = FALSE,
