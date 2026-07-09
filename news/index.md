@@ -1,5 +1,14 @@
 # Changelog
 
+## rasch 1.5.1
+
+- The judge unexpected-judgements map () is now drawn at the matchup
+  level: each pair the judge met is a segment spanning its two objects
+  on the consensus location axis, placed by how surprising the verdict
+  was, with the judge’s backed object filled. returns the per-matchup
+  residuals behind it. The object-level is retained for per-object
+  residuals.
+
 ## rasch 1.5.0
 
 - [`judge_surprise()`](https://drjoshmcgrane.github.io/rasch/reference/judge_surprise.md)
