@@ -887,12 +887,27 @@ panel_persons <- nav_panel("Persons", value = "p_persons", icon = bs_icon("peopl
         plotCard("pfit")),
       accordion_panel("Fit residual distribution", value = "persons_rdist",
         plotCard("rdist_p")))),
-    # paired-comparison (BTL) fits: the judge fit table (the page itself is
-    # offered only when a judge column was nominated)
+    # paired-comparison (BTL) fits: the judges are the persons here, so the
+    # page carries their fit and their transitivity consistency -- the two
+    # judge-level lenses (offered only when a judge column was nominated)
     conditionalPanel("output.is_btl == true && output.has_judges == true",
-      tableCard("btl_judges_tbl", "Judges",
-                "Available when a judge column is nominated; an erratic judge carries a large positive fit residual, exactly as an erratic person does.",
-                controls = cols_switch("btl_judges_full")))
+      accordion(id = "btl_judge_acc", open = "btl_judge_fit",
+        accordion_panel(
+          title = span("Judge fit",
+            info_icon("An erratic judge carries a large positive fit residual, exactly as an erratic person does; the log-of-mean-square residual and infit/outfit are pooled over the judge's comparisons.")),
+          value = "btl_judge_fit",
+          tableCard("btl_judges_tbl",
+                    controls = cols_switch("btl_judges_full"))),
+        accordion_panel(
+          title = span("Judge consistency",
+            info_icon("The paired-comparison counterpart of person fit. A judge whose choices form many preference loops (prefers A over B, B over C, then C over A) is internally inconsistent - not measuring on a single scale. Consistency is 1 minus the judge's circular-triad rate over the chance rate; 1 is one clean order, 0 is guessing.")),
+          value = "btl_judge_consistency",
+          layout_columns(col_widths = breakpoints(sm = 12, lg = c(5, 7)),
+            tableCard("btl_trans_judges_tbl", title = "Consistency by judge",
+                      note = "Judges sorted least consistent first."),
+            plotCard("btl_judge_consist", title = "Consistency dotplot",
+                     info = "Each judge against the chance line at 0 and the clean-order line at 1. Judges near or below chance contribute little signal.",
+                     height = "460px")))))
   )
 
 # ------------------------------------------------------------ TARGETING --
@@ -1156,17 +1171,14 @@ panel_dim <- nav_panel("Trait", value = "p_dim", icon = bs_icon("diagram-3"),
                     note = "Strength, share of the total residual, and the noise reference (mean and 95th percentile) for the leading bimension.")),
         accordion_panel(
           title = span("Preference loops",
-            info_icon("The single-dimension check. If one attribute drives the contests, preferences stack into one order: A beats B and B beats C implies A beats C. A loop (A beats B, B beats C, C beats A) is a contradiction, like rock-paper-scissors. The loop rate is set against pure guessing (a quarter of triples); consistency is 1 minus loop-rate over chance. With judges, each judge's own consistency flags those drifting toward chance.")),
+            info_icon("The single-dimension check. If one attribute drives the contests, preferences stack into one order: A beats B and B beats C implies A beats C. A loop (A beats B, B beats C, C beats A) is a contradiction, like rock-paper-scissors. The loop rate is set against pure guessing (a quarter of triples); consistency is 1 minus loop-rate over chance. Each judge's own consistency is on the Persons tab.")),
           value = "btl_dim_loops",
           layout_columns(col_widths = breakpoints(sm = 12, lg = c(7, 5)),
             tableCard("btl_trans_tbl", title = "Transitivity summary",
                       note = "Circular triads out of the complete triples, the loop rate against the 25% chance rate, and Kendall's coefficient of consistency when every pair was compared."),
-            plotCard("btl_trans_plot", title = "Consistency by judge",
-                     info = "Each judge's consistency (1 = one clean order, 0 = guessing). Judges near or below the chance line contribute little signal.",
-                     height = "460px")),
-          conditionalPanel("output.has_judges == true",
-            tableCard("btl_trans_judges_tbl", title = "Judge consistency",
-                      note = "Judges sorted least consistent first."))))),
+            plotCard("btl_involve_plot", title = "Objects in loops",
+                     info = "How many circular triads each object sits in - the objects whose order is least stable, and the likeliest seat of a second attribute.",
+                     height = "460px"))))),
     conditionalPanel("output.is_btl != true",
     p(class = "text-muted small",
       "Trait dependence (dimensionality) threatens local independence: more than one trait driving the responses (Marais & Andrich 2008)."),
@@ -3518,9 +3530,19 @@ server <- function(input, output, session) {
   register_table("btl_trans_tbl", function() btl_trans()$summary,
                  function() num_dt(btl_trans()$summary),
                  code = function() "btl_transitivity(bt)$summary")
-  register_plot("btl_trans_plot", function() plot_btl_transitivity(btl_trans()),
+  # structural lens (Trait tab): which objects sit in the most loops
+  register_plot("btl_involve_plot",
+                function() plot_btl_transitivity(btl_trans(), by = "object"),
                 w = 7, h = 5, code = function()
-                  "plot_btl_transitivity(btl_transitivity(bt))")
+                  'plot_btl_transitivity(btl_transitivity(bt), by = "object")')
+  # per-judge lens (Persons tab): each judge's consistency
+  register_plot("btl_judge_consist", function() {
+    tr <- btl_trans()
+    validate(need(!is.null(tr$judges),
+      "No judge reached enough compared triples for a consistency estimate."))
+    plot_btl_transitivity(tr, by = "judge")
+  }, w = 7, h = 5, code = function()
+    'plot_btl_transitivity(btl_transitivity(bt), by = "judge")')
   register_table("btl_trans_judges_tbl",
                  function() btl_trans()$judges,
                  function() {

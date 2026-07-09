@@ -307,17 +307,26 @@ print.rasch_btl_dim <- function(x, ...) {
 
 #' Consistency plot for paired-comparison transitivity
 #'
-#' Plots each judge's consistency (1 minus the circular-triad rate over the
-#' chance rate) as a dot against the chance line at zero; with no judges,
-#' plots each object's circular-triad involvement instead.
+#' With \code{by = "judge"} (the default when judges exist), plots each
+#' judge's consistency -- one minus the circular-triad rate over the chance
+#' rate -- as a dot against the chance line at zero: the individual-judge
+#' lens, a judge-fit analogue. With \code{by = "object"}, plots each object's
+#' circular-triad involvement instead: the structural lens, showing which
+#' objects sit in the most contradictions.
 #'
 #' @param x A \code{"rasch_btl_transitivity"} object.
+#' @param by \code{"auto"} (judges if present, else objects), \code{"judge"},
+#'   or \code{"object"}.
 #' @param ... Unused.
 #' @return Called for its plotting side effect.
 #' @export
-plot_btl_transitivity <- function(x, ...) {
+plot_btl_transitivity <- function(x, by = c("auto", "judge", "object"), ...) {
   stopifnot(inherits(x, "rasch_btl_transitivity"))
-  if (!is.null(x$judges)) {
+  by <- match.arg(by)
+  use_judge <- if (by == "auto") !is.null(x$judges) else by == "judge"
+  if (use_judge && is.null(x$judges))
+    stop("no per-judge consistency (no judges, or too few compared triples)")
+  if (use_judge) {
     j <- x$judges[order(x$judges$consistency), ]
     n <- nrow(j)
     op <- .rr_canvas(c(min(0, min(j$consistency)) - 0.02, 1), c(0.5, n + 0.5),
