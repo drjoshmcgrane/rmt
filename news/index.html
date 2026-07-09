@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.4.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.5.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,11 @@
       <small>Source: <a href="https://github.com/drjoshmcgrane/rasch/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.5.0" id="rasch-150">rasch 1.5.0<a class="anchor" aria-label="anchor" href="#rasch-150"></a></h2>
+<ul><li>
+<code><a href="../reference/judge_surprise.html">judge_surprise()</a></code> and <code><a href="../reference/plot_btl_judge_map.html">plot_btl_judge_map()</a></code>: the paired-comparison counterpart of the kidmap. A judge has no ability to condition on, so the reference is the consensus object scale; each object a judge met gets a standardised residual saying how much more or less that judge favoured it than its location predicts. A strong object the judge under-rated, or a weak object over-rated, is an unexpected judgement. It catches systematic bias – a distinct failure mode from the noise that judge fit and judge consistency flag. In the Shiny app the Persons &gt; Judge fit panel is now a master-detail: the judges table drives the selected judge’s map, mirroring person -&gt; kidmap.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.4.0" id="rasch-140">rasch 1.4.0<a class="anchor" aria-label="anchor" href="#rasch-140"></a></h2>
 <ul><li>Paired comparisons gain the pair-structure analogues of the Rasch independence diagnostics – the tools that a persons-by-items residual matrix would give but paired-comparison data cannot.

@@ -118,6 +118,8 @@ diagnostics (transitivity and the residual bimension decomposition).
   : Transitivity of paired comparisons
 - [`btl_dimensionality()`](https://drjoshmcgrane.github.io/rasch/reference/btl_dimensionality.md)
   : Residual dimensionality of paired comparisons
+- [`judge_surprise()`](https://drjoshmcgrane.github.io/rasch/reference/judge_surprise.md)
+  : Unexpected judgements of one judge
 - [`plot_btl()`](https://drjoshmcgrane.github.io/rasch/reference/plot_btl.md)
   : Plot Bradley-Terry-Luce object locations
 - [`plot_btl_categories()`](https://drjoshmcgrane.github.io/rasch/reference/plot_btl_categories.md)
@@ -132,6 +134,8 @@ diagnostics (transitivity and the residual bimension decomposition).
   : Scree of paired-comparison residual bimensions
 - [`plot_btl_dim_map()`](https://drjoshmcgrane.github.io/rasch/reference/plot_btl_dim_map.md)
   : Residual map of the leading paired-comparison bimension
+- [`plot_btl_judge_map()`](https://drjoshmcgrane.github.io/rasch/reference/plot_btl_judge_map.md)
+  : Unexpected-judgement map for one judge
 
 ## Plots
 
