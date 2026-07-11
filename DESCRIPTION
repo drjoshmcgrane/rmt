@@ -1,7 +1,7 @@
 Package: rasch
 Type: Package
 Title: Pairwise Conditional Rasch Measurement Analysis and Diagnostics
-Version: 1.7.1
+Version: 1.8.0
 Authors@R: person("Josh", "McGrane", role = c("aut", "cre"),
     email = "drjoshmcgrane@gmail.com")
 Description: Pairwise conditional maximum likelihood estimation of dichotomous
@@ -65,8 +65,9 @@ Description: Pairwise conditional maximum likelihood estimation of dichotomous
     2008), in which the unit of the latent scale differs across item-set by
     person-group frames: group units are estimated by person-free
     within-frame pairwise conditioning and set units by error-corrected
-    person linking, all reported in a common arbitrary unit. A modern Shiny
-    interface and a one-call exporter for every table and plot are included.
+    person linking, all reported in a common arbitrary unit. A modern
+    'shiny' interface and a one-call exporter for every table and plot are
+    included.
     Implemented from published measurement theory in base R, with no
     dependence on other estimation engines.
 URL: https://drjoshmcgrane.github.io/rasch/, https://github.com/drjoshmcgrane/rasch

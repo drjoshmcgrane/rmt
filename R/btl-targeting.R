@@ -50,14 +50,15 @@
 #' zero and falls away with the location gap, near-neighbour contests are
 #' the informative ones.
 #'
-#' The design information inverts to a naive standard error
-#' \code{se_naive = 1 / sqrt(information)}, the error one would report if the
-#' comparisons were independent trials. The fit's own \code{se} is the
-#' Godambe sandwich standard error, clustered by judge when judges are
-#' identified; the two agree when comparisons are independent and diverge
-#' when judges cluster (repeated verdicts by one judge carry less independent
-#' information than their count suggests), so the gap between them is itself a
-#' diagnostic of clustering.
+#' The design information inverts to \code{se_naive = 1 / sqrt(information)}:
+#' the error the object's comparisons would give if its location were the
+#' ONLY free parameter -- a single-parameter lower bound, useful for reading
+#' which objects the design serves well. It is not the model's standard
+#' error even with independent comparisons (every location is estimated
+#' jointly with the others, and the fit's own \code{se} is additionally the
+#' judge-clustered Godambe sandwich), so \code{se} sits above
+#' \code{se_naive} as a rule; treat their ratio as descriptive, not as a
+#' clustering test.
 #'
 #' @param fit A paired-comparison fit from \code{\link{btl}}.
 #' @return A list of class \code{"rasch_btl_info"}: \code{objects} (per
@@ -139,10 +140,9 @@ btl_information <- function(fit) {
 
   notes <- paste0(
     "se is the ", if (fit$clustered) "judge-clustered " else "",
-    "Godambe sandwich standard error; se_naive = 1/sqrt(information) treats ",
-    "comparisons as independent trials",
-    if (fit$clustered)
-      ", so the two differ when judges cluster their verdicts" else "")
+    "Godambe sandwich standard error; se_naive = 1/sqrt(information) is a ",
+    "single-parameter lower bound (as if the object's location were the ",
+    "only free parameter), so se sits above it as a rule")
 
   out <- list(objects = objects, pairs = pairs, comparisons = comparisons,
               total = sum(Iw), m = m, clustered = fit$clustered,
@@ -247,15 +247,18 @@ plot_btl_targeting <- function(fit, grid = NULL) {
 #' object pairs by the information one additional comparison would carry at
 #' the current estimates. That information peaks when the two objects are
 #' close in location, so at equal measurement the recommender favours
-#' near-neighbour contests. With \code{weight_se = TRUE} (the default) the
-#' expected information is multiplied by \code{se_a^2 + se_b^2}, so pairs of
-#' poorly measured objects are promoted -- a greedy, one-step
-#' D-optimality-flavoured heuristic that spends the next comparison where it
-#' most reduces error.
+#' near-neighbour contests. With \code{weight_se = TRUE} (the default) each
+#' pair's priority is the one-step reduction in TOTAL location variance that
+#' one added comparison of the pair would deliver -- computed exactly from
+#' the fit's stored covariance by a rank-one (Sherman-Morrison) update with
+#' the comparison's information on the contrast -- so pairs of poorly
+#' measured (and correlated) objects are promoted.
 #'
 #' Two honest cautions. This is a \emph{greedy} rule that scores each pair on
-#' its own immediate information; it is not a full optimal design and can be
-#' beaten by a design that plans several comparisons jointly. And adaptive
+#' its own immediate one-step gain (an A-optimality step at the current
+#' estimates, taking the clustered covariance as the state); it is not a full
+#' optimal design and can be beaten by one that plans several comparisons
+#' jointly. And adaptive
 #' selection is known to inflate a separation (scale) reliability computed
 #' naively afterwards, because the design concentrates comparisons where they
 #' shrink the errors most: report reliability from an independent or
@@ -264,9 +267,10 @@ plot_btl_targeting <- function(fit, grid = NULL) {
 #'
 #' @param fit A paired-comparison fit from \code{\link{btl}}.
 #' @param n Number of pairs to return.
-#' @param weight_se Weight the expected information by \code{se_a^2 + se_b^2}
-#'   to prioritise poorly measured objects (default \code{TRUE}). When
-#'   \code{FALSE}, pairs are ranked by expected information alone.
+#' @param weight_se Rank by the one-step total-variance reduction (default
+#'   \code{TRUE}; falls back to \code{expected_information * (se_a^2 +
+#'   se_b^2)} if the fit carries no covariance). When \code{FALSE}, pairs are
+#'   ranked by expected information alone (pure closeness).
 #' @return A data frame of the top \code{n} candidate pairs, each oriented to
 #'   its stronger object: \code{object_a}, \code{object_b}, the location
 #'   \code{gap}, \code{n_existing} (replications already observed for the
@@ -308,7 +312,18 @@ btl_next_pairs <- function(fit, n = 10, weight_se = TRUE) {
   loo <- ifelse(hi == i, j, i)
   gap <- unname(beta[hi] - beta[loo])
   eI <- .btl_info_of_d(gap, m, tau)
-  prio <- if (weight_se) eI * (se[hi]^2 + se[loo]^2) else eI
+  # priority = the one-step reduction in TOTAL location variance from one
+  # added comparison of the pair: with information I on the contrast
+  # v = e_hi - e_lo, Sherman-Morrison gives I ||Sigma v||^2 / (1 + I v'Sigma v)
+  # (sum of se^2 as a fallback when the fit carries no covariance)
+  prio <- if (weight_se && !is.null(fit$cov_beta)) {
+    Sg <- fit$cov_beta
+    vapply(seq_along(i), function(k) {
+      v <- numeric(K); v[hi[k]] <- 1; v[loo[k]] <- -1
+      Sv <- drop(Sg %*% v)
+      eI[k] * sum(Sv^2) / (1 + eI[k] * drop(crossprod(v, Sv)))
+    }, 0)
+  } else if (weight_se) eI * (se[hi]^2 + se[loo]^2) else eI
   ne <- n_existing[paste(pmin(i, j), pmax(i, j))]
   ne[is.na(ne)] <- 0
 

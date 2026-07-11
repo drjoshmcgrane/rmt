@@ -203,6 +203,7 @@ test_that("misfit layers compose: dependence and style respect DIF / 2nd dim", {
 })
 
 test_that("btl_dimensionality reference honours fitted dependence effects", {
+  skip_on_cran()   # heavy simulation; verified locally and on CI
   # one-dimensional data whose only structure is within-judge order effects,
   # fitted WITH order: the dependence-aware reference must not read the
   # order structure as a second attribute

@@ -968,3 +968,59 @@ test_that("position and order covariates are estimated together", {
   expect_equal(pos$n_informative, f$n_comparisons)
   expect_gt(pos$z, 2)   # the planted first-position advantage is detected
 })
+
+test_that("count-weighted rows give the SAME standard errors as expanded rows", {
+  # the sandwich meat must treat a count=w row as w independent comparisons
+  # (w * (x-E)^2), not one cluster of weight w ((w*(x-E))^2): the latter
+  # inflated every SE by ~sqrt(w)
+  set.seed(1); beta <- c(A = -1, B = -0.2, C = 0.5, D = 0.7)
+  pr <- t(combn(names(beta), 2))
+  d <- data.frame(a = rep(pr[, 1], each = 12), b = rep(pr[, 2], each = 12))
+  d$win <- ifelse(runif(nrow(d)) < plogis(beta[d$a] - beta[d$b]), d$a, d$b)
+  agg <- aggregate(cbind(k = rep(1, nrow(d))) ~ a + b + win, d, sum)
+  fe <- btl(d, "a", "b", "win")
+  fw <- btl(agg, "a", "b", "win", count = "k")
+  expect_equal(fw$objects$location, fe$objects$location, tolerance = 1e-10)
+  expect_equal(fw$objects$se, fe$objects$se, tolerance = 1e-10)
+  expect_equal(fw$osi$PSI, fe$osi$PSI, tolerance = 1e-8)
+})
+
+test_that("anchoring converges regardless of the anchor origin", {
+  set.seed(2); objs <- paste0("O", 1:5)
+  b <- setNames(seq(-1, 1, length.out = 5), objs)
+  pr <- t(combn(objs, 2))
+  d <- data.frame(a = rep(pr[, 1], each = 30), b = rep(pr[, 2], each = 30))
+  d$win <- ifelse(runif(nrow(d)) < plogis(b[d$a] - b[d$b]), d$a, d$b)
+  free <- btl(d, "a", "b", "win")
+  for (delta in c(3, 10)) {
+    anc <- setNames(free$objects$location[match(c("O1", "O5"),
+                                                free$objects$object)] + delta,
+                    c("O1", "O5"))
+    fa <- btl(d, "a", "b", "win", anchors = anc)
+    expect_true(fa$converged)
+    # anchoring at translated values IS a pure translation of the free fit
+    expect_equal(fa$objects$location, free$objects$location + delta,
+                 tolerance = 1e-8)
+  }
+})
+
+test_that("btl_next_pairs one-step priority beats the lowest-priority pair", {
+  set.seed(9); objs <- paste0("E", 1:6)
+  b <- setNames(seq(-1.2, 1.2, length.out = 6), objs)
+  pr <- t(combn(objs, 2))
+  d <- data.frame(a = rep(pr[, 1], each = 15), b = rep(pr[, 2], each = 15))
+  d$win <- ifelse(runif(nrow(d)) < plogis(b[d$a] - b[d$b]), d$a, d$b)
+  d <- d[!(d$a == "E3" | d$b == "E3") | seq_len(nrow(d)) %% 5 == 0, ]  # starve E3
+  f <- btl(d, "a", "b", "win")
+  np <- btl_next_pairs(f, n = 15)
+  addvar <- function(pa, pb) {
+    set.seed(77)
+    ex <- data.frame(a = rep(pa, 25), b = rep(pb, 25))
+    ex$win <- ifelse(runif(25) < plogis(b[ex$a] - b[ex$b]), ex$a, ex$b)
+    ff <- btl(rbind(d[, c("a", "b", "win")], ex), "a", "b", "win")
+    sum(ff$objects$se^2)
+  }
+  expect_lt(addvar(np$object_a[1], np$object_b[1]),
+            addvar(np$object_a[nrow(np)], np$object_b[nrow(np)]))
+  expect_true("E3" %in% c(np$object_a[1], np$object_b[1]))
+})

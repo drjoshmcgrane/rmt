@@ -569,6 +569,13 @@ panel_data <- nav_panel("Data", value = "p_data", icon = bs_icon("database"),
                                options = list(placeholder = "none")),
                 p(class = "text-muted small",
                   "Nominate judge groupings (columns constant within judge, e.g. judge sex or background) to test differential object functioning (DIF) by judge group.")),
+              checkboxInput("bt_position", "First-position advantage", FALSE),
+              p(class = "text-muted small",
+                "Object A is the first/left-presented of each pair; estimates the positional advantage (Davidson & Beaver 1977)."),
+              fileInput("bt_anchor_file", "Anchor objects (CSV: object, location)",
+                        accept = ".csv", placeholder = "optional"),
+              p(class = "text-muted small",
+                "Anchoring places this calibration on an existing scale: the named objects are held at their given locations and the rest estimated around them."),
               conditionalPanel("!input.bt_response && !input.bt_margin",
                 radioButtons("bt_ties", "Ties",
                              c("Drop" = "drop", "Half a win each" = "half"))),
@@ -917,6 +924,30 @@ panel_persons <- nav_panel("Persons", value = "p_persons", icon = bs_icon("peopl
 
 # ------------------------------------------------------------ TARGETING --
 panel_targeting <- nav_panel("Targeting", value = "p_targeting", icon = bs_icon("bullseye"),
+    # paired-comparison (BTL) fits: the person-item targeting displays need a
+    # person distribution that paired comparisons do not produce, so they hide
+    # and the design-information analogues take their place
+    conditionalPanel("output.is_btl == true",
+      p(class = "text-muted small",
+        "Targeting for paired comparisons: where on the scale the design measures well, and which new comparisons would sharpen it most. The design-information counterpart of the test-information function."),
+      layout_columns(col_widths = breakpoints(sm = 12, xl = c(6, 6)),
+        tableCard("btl_info_tbl", "Design information",
+          info = "Each object's design information is the pooled Fisher information of the comparisons it took part in - how tightly the observed contests pin its location down. se_naive = 1/sqrt(information) is the standard error that would hold if the comparisons were independent trials; it differs from the fit's judge-clustered sandwich se because repeated verdicts by one judge carry less independent information than their count suggests, so the gap between them is a diagnostic of clustering."),
+        plotCard("btl_targeting_plot", "Design information and targeting",
+          info = "Every object at its location (x) and design information (y), the dot sized by its comparison count. The dashed reference curve, read on the right axis, traces the information one new comparison would carry against an opponent at each location, anchored at the centre of the scale so it peaks at gap zero - the visual reason an adaptive design chases near-neighbour contests, where information is bought most cheaply.")),
+      accordion(class = "mt-3",
+        accordion_panel("Next most informative pairs", value = "btl_next_panel",
+          layout_columns(col_widths = breakpoints(sm = 12, md = c(4, 8)),
+            div(
+              numericInput("btl_next_n", "Pairs to recommend", value = 10,
+                           min = 3, max = 50),
+              checkboxInput("btl_next_wse", "Prioritise poorly-measured objects",
+                            TRUE),
+              p(class = "text-muted small",
+                "The adaptive comparative judgement step (Pollitt 2012): rank candidate pairs by the information one more comparison would carry at the current estimates, favouring near-neighbour contests. Weighting by the pair's standard errors promotes poorly measured objects.")),
+            tableCard("btl_next_tbl", "Recommended comparisons",
+              info = "The top candidate pairs by the information one new comparison would carry (Pollitt 2012 adaptive comparative judgement); with the weighting on, the priority multiplies expected information by the pair's error variance so poorly measured objects rise. A caution (Bramley 2015): adaptive selection inflates a naively computed scale-separation reliability, so report reliability from a non-adaptive subset or treat an adaptive value as an upper bound."))))),
+    conditionalPanel("output.is_btl != true",
     layout_sidebar(
       sidebar = sidebar(width = 280, open = "always",
         sliderInput("tg_bins", "Histogram bins", min = 10, max = 60,
@@ -928,7 +959,7 @@ panel_targeting <- nav_panel("Targeting", value = "p_targeting", icon = bs_icon(
       layout_columns(col_widths = 12,
         plotCard("pim_p", "Person-item threshold distribution"),
         plotCard("wright", "Wright map", height = "640px"))
-    )
+    ))
   )
 
 # ------------------------------------------------------------------ DIF --
@@ -1080,6 +1111,25 @@ panel_facets <- nav_panel("Facets", value = "p_facets", icon = bs_icon("person-b
 
 # -------------------------------------------------------------- EQUATING --
 panel_equating <- nav_panel("Equating", value = "p_equating", icon = bs_icon("arrow-left-right"),
+    # paired-comparison (BTL) fits: common-object equating against a banked
+    # calibration (standards maintenance across panels or years); the Rasch
+    # common-item machinery hides while a BTL fit is active
+    conditionalPanel("output.is_btl == true",
+      layout_sidebar(
+        sidebar = sidebar(width = 300, open = "always",
+          fileInput("bt_eq_file", "Reference calibration (CSV: object, location, se)",
+                    accept = ".csv"),
+          uiOutput("btl_eq_summary"),
+          p(class = "text-muted small mt-2",
+            "Common objects (matched by name) are tested against the shifted identity line; objects that drift were valued differently by the two calibrations and weaken the equating link. The standards-maintenance use of comparative judgement across panels or years (Bramley 2007).")),
+        layout_columns(col_widths = 12,
+          tableCard("btl_eq_tbl", "Common-object comparison",
+            info = "Each common object is tested against the shifted identity line after the precision-weighted origin shift (the two sum-zero scales are centred on different object sets). A drifting object weakens the link; p_adj is the multiplicity-adjusted drift p-value, shown red below 0.05."),
+          plotCard("btl_eq_plot", "Equating plot",
+            info = "The two calibrations' common-object locations against the shifted identity line, with per-object bands; objects that drift after the multiplicity adjustment are highlighted and labelled."))
+      )
+    ),
+    conditionalPanel("output.is_btl != true",
     layout_sidebar(
       sidebar = sidebar(width = 300, open = "always",
         radioButtons("eq_source", "Reference",
@@ -1128,7 +1178,7 @@ panel_equating <- nav_panel("Equating", value = "p_equating", icon = bs_icon("ar
           conditionalPanel("output.has_eq == true",
             plotOutput("eq_plot", height = "560px"), rcode_details("eq_plot")),
           padding = 8, fillable = FALSE))
-    )
+    ))
   )
 
 # --------------------------------------------------------------- FRAMES --
@@ -1834,6 +1884,20 @@ server <- function(input, output, session) {
     a
   })
 
+  # paired-comparison anchors: a two-column CSV (object, location) that places
+  # this calibration on an existing scale, parsed defensively like anchors_in()
+  bt_anchors_in <- reactive({
+    if (is.null(input$bt_anchor_file)) return(NULL)
+    a <- tryCatch(read.csv(input$bt_anchor_file$datapath, stringsAsFactors = FALSE),
+                  error = function(e) NULL)
+    if (is.null(a) || !all(c("object", "location") %in% names(a))) {
+      showNotification("Anchor file needs columns object, location - ignored.",
+                       type = "warning")
+      return(NULL)
+    }
+    a
+  })
+
   observeEvent(raw_data(), {
     df <- raw_data(); nm <- names(df)
     guess_id <- nm[grepl("^id$|_id$|^person", tolower(nm))][1]
@@ -2144,6 +2208,13 @@ server <- function(input, output, session) {
           bt_ord <- if (!is.null(input$bt_order) && nzchar(input$bt_order) &&
                         !is.null(input$bt_judge) && input$bt_judge != NONE)
             input$bt_order else NULL
+          # first-position advantage (object A is the first-presented of the
+          # pair) and equating anchors (a named location per object) both feed
+          # btl() directly; anchors come from a two-column CSV
+          bt_pos <- isTRUE(input$bt_position)
+          bt_anc_df <- bt_anchors_in()
+          bt_anchor_vec <- if (!is.null(bt_anc_df))
+            setNames(bt_anc_df$location, bt_anc_df$object) else NULL
           if (any(c(input$bt_a, input$bt_b) == NONE) ||
               (!bt_graded && identical(input$bt_win, NONE)))
             stop("nominate the object A, object B, and winner (or graded response) columns")
@@ -2156,6 +2227,10 @@ server <- function(input, output, session) {
             if (!is.null(input$bt_judge) && input$bt_judge != NONE)
               paste0("judge = ", qstr(input$bt_judge)),
             if (!is.null(bt_ord)) paste0("order = ", qstr(bt_ord)),
+            if (bt_pos) "position = TRUE",
+            if (!is.null(bt_anchor_vec))
+              paste0("anchors = with(read.csv(", qstr(input$bt_anchor_file$name),
+                     "), setNames(location, object))"),
             if (!is.null(input$bt_count) && input$bt_count != NONE)
               paste0("count = ", qstr(input$bt_count)),
             if (!bt_graded && !bt_marg)
@@ -2170,6 +2245,7 @@ server <- function(input, output, session) {
                  judge = if (!is.null(input$bt_judge) &&
                              input$bt_judge != NONE) input$bt_judge else NULL,
                  order = bt_ord,
+                 position = bt_pos, anchors = bt_anchor_vec,
                  count = if (!is.null(input$bt_count) &&
                              input$bt_count != NONE) input$bt_count else NULL,
                  maxit = eo$maxit, tol = eo$tol),
@@ -2413,8 +2489,11 @@ server <- function(input, output, session) {
     show("p_summary", rasch_on || btl_on)
     show("p_items", rasch_on || btl_on)
     show("p_persons", rasch_on || (btl_on && !is.null(bf$judges)))
+    # Targeting and Equating serve both fits: a Rasch person-item / common-item
+    # analysis, or the paired-comparison design-information and common-object
+    # equating variants (each page shows the matching one)
     for (tgt in c("p_targeting", "p_equating"))
-      show(tgt, rasch_on)
+      show(tgt, rasch_on || btl_on)
     # the Trait tab now carries paired-comparison dimensionality too
     # (transitivity loops + the residual bimension swirl)
     show("p_dim", rasch_on || btl_on)
@@ -3804,7 +3883,11 @@ server <- function(input, output, session) {
   # must still show the audit table that explains why
   output$has_btl_dep <- reactive({
     b <- btl_fit()
-    !is.null(b) && !is.null(b$dependence_data)
+    # either the per-comparison history covariates (order effects) OR an
+    # estimated dependence effect: a position-only fit carries a first-position
+    # effect in $dependence even when there is no order column to build
+    # $dependence_data from
+    !is.null(b) && (!is.null(b$dependence_data) || !is.null(b$dependence))
   })
   outputOptions(output, "has_btl_dep", suspendWhenHidden = FALSE)
   register_table("btl_dep_tbl", function() {
@@ -3821,11 +3904,17 @@ server <- function(input, output, session) {
   }, code = function() "bt$dependence")
   # the graphical display of the selected dependence effect
   register_plot("btl_dep_plot", function() {
-    b <- bfit(); req(!is.null(b$dependence_data))
+    b <- bfit()
+    e <- input$btl_dep_effect %||% "exposure"
+    # the first-position advantage is a single constant added to every
+    # comparison, not a binned history covariate, so the departure-vs-covariate
+    # display does not apply; it (and a fit with no order history at all) is
+    # read from the table instead
+    validate(need(!is.null(b$dependence_data) && e != "position",
+                  "The first-position effect is a constant, not a history covariate; read it from the table."))
     validate(need(!is.null(b$dependence),
                   paste("No dependence effect was estimable:",
                         paste(b$notes, collapse = "; "))))
-    e <- input$btl_dep_effect %||% "exposure"
     validate(need(e %in% b$dependence$effect,
                   "This effect had no informative comparisons (or separated) and was dropped; see the notes."))
     plot_btl_dependence(b, e)
@@ -3877,6 +3966,77 @@ server <- function(input, output, session) {
                      "Per-judge consistency needs judges with enough compared triples."))
                    num_dt(j)
                  }, code = function() "btl_transitivity(bt)$judges")
+
+  # ------------------------------------------------ BTL targeting (design --
+  # information, the targeting plot, and the adaptive next-pairs recommender)
+  btl_info <- reactive({ b <- bfit(); btl_information(b) })
+  register_table("btl_info_tbl", function() btl_info()$objects,
+                 function() num_dt(btl_info()$objects),
+                 code = function() "btl_information(bt)$objects")
+  register_plot("btl_targeting_plot", function() plot_btl_targeting(bfit()),
+                w = 9, h = 6, code = function() "plot_btl_targeting(bt)")
+  # the adaptive next-pairs recommender (numeric count + the SE-weighting
+  # switch drive both the table and its reproducible code)
+  btl_next_args <- reactive({
+    nn <- input$btl_next_n %||% 10
+    list(n = if (is.null(nn) || is.na(nn) || nn < 3) 10L else as.integer(nn),
+         weight_se = isTRUE(input$btl_next_wse %||% TRUE))
+  })
+  register_table("btl_next_tbl",
+                 function() { a <- btl_next_args()
+                   btl_next_pairs(bfit(), n = a$n, weight_se = a$weight_se) },
+                 function() { a <- btl_next_args()
+                   num_dt(btl_next_pairs(bfit(), n = a$n,
+                                         weight_se = a$weight_se)) },
+                 code = function() { a <- btl_next_args()
+                   sprintf("btl_next_pairs(bt, n = %d, weight_se = %s)",
+                           a$n, if (a$weight_se) "TRUE" else "FALSE") })
+
+  # ------------------------------------------------- BTL common-object equating --
+  # a banked reference calibration (object, location, se), parsed defensively;
+  # btl_equate() is carried as a value or an error so <3-common-object and
+  # other failures surface as a message rather than a red crash
+  bt_eq_bank <- reactive({
+    if (is.null(input$bt_eq_file)) return(NULL)
+    a <- tryCatch(read.csv(input$bt_eq_file$datapath, stringsAsFactors = FALSE),
+                  error = function(e) NULL)
+    if (is.null(a) || !all(c("object", "location", "se") %in% names(a))) {
+      showNotification("Reference CSV needs columns object, location, se - ignored.",
+                       type = "warning")
+      return(NULL)
+    }
+    a
+  })
+  bt_equate <- reactive({
+    bank <- bt_eq_bank()
+    validate(need(!is.null(bank),
+                  "Upload a reference calibration to test drift against it."))
+    tryCatch(btl_equate(bfit(), bank), error = function(e) e)
+  })
+  output$btl_eq_summary <- renderUI({
+    req(!is.null(bt_eq_bank()))
+    r <- bt_equate(); req(!inherits(r, "error"))
+    p(class = "text-muted small mb-0 mt-2",
+      sprintf("Shift %.3f ± %.3f logits over %d common object%s.",
+              r$shift, r$shift_se, r$n_common,
+              if (r$n_common == 1L) "" else "s"))
+  })
+  register_table("btl_eq_tbl", function() {
+    r <- bt_equate(); validate(need(!inherits(r, "error"), conditionMessage(r)))
+    r$table
+  }, function() {
+    r <- bt_equate(); validate(need(!inherits(r, "error"), conditionMessage(r)))
+    d <- r$table
+    style_lo_red(num_dt(d), d, "p_adj", 0.05)
+  }, code = function()
+    sprintf('bank <- read.csv(%s)  # columns: object, location, se\nbtl_equate(bt, bank)$table',
+            qstr(input$bt_eq_file$name %||% "reference.csv")))
+  register_plot("btl_eq_plot", function() {
+    r <- bt_equate(); validate(need(!inherits(r, "error"), conditionMessage(r)))
+    plot_btl_equate(bfit(), bt_eq_bank())
+  }, w = 8, h = 6, code = function()
+    sprintf('bank <- read.csv(%s)\nplot_btl_equate(bt, bank)',
+            qstr(input$bt_eq_file$name %||% "reference.csv")))
 
   # -------------------------------------------- BTL DIF by judge group --
   # the judge grouping handed to btl_dif() / plot_btl_icc(): the nominated

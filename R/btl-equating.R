@@ -64,6 +64,16 @@
 #' weakens the equating link; the surviving objects carry the second
 #' calibration's whole scale onto the first (\code{loc2 + shift}).
 #'
+#' The single shift presumes the drifting objects are a \emph{minority}. When
+#' most of the common objects have genuinely moved, the precision-weighted
+#' shift is pulled toward the movers and the drift tests can invert -- the
+#' stable anchors flag as the apparent drifters. Read wholesale flagging
+#' (several objects, one direction) as a contaminated link, not as evidence
+#' about the individual objects; equate through a vetted anchor subset
+#' instead. The \code{shift_se} accounts for the covariance of the location
+#' estimates within each calibration (each is sum-zero constrained, so its
+#' locations are not independent).
+#'
 #' @param fit1 A fitted object from \code{\link{btl}}: the calibration whose
 #'   scale (origin) the equating targets.
 #' @param fit2 A second \code{\link{btl}} fit, or a bank: a data frame with
@@ -113,7 +123,22 @@ btl_equate <- function(fit1, fit2, alpha = 0.05, p_adjust = "holm") {
   # precision-weighted mean difference: the shift between the two sum-zero
   # origins, best estimated where both calibrations are most certain
   c0 <- sum(w * d) / sum(w)
-  shift_se <- sqrt(1 / sum(w))
+  # the common objects' location estimates are CORRELATED within each
+  # sum-zero calibration, so Var(c0) = u' (Sigma1 + Sigma2) u with
+  # u = w / sum(w), taken from the stored sandwich covariances (a bank
+  # supplies no covariance and contributes diag(se^2) -- conservative)
+  covsub <- function(fit, objs_c) {
+    if (inherits(fit, "rasch_btl") && !is.null(fit$cov_beta)) {
+      i <- match(objs_c, as.character(fit$objects$object))
+      fit$cov_beta[i, i, drop = FALSE]
+    } else NULL
+  }
+  u <- w / sum(w)
+  S1 <- covsub(fit1, common)
+  S2 <- covsub(fit2, common)
+  if (is.null(S1)) S1 <- diag(a$se^2, length(common))
+  if (is.null(S2)) S2 <- diag(b$se^2, length(common))
+  shift_se <- sqrt(max(drop(t(u) %*% (S1 + S2) %*% u), 0))
   se_diff <- sqrt(pmax(v, 1e-10))
   t <- (d - c0) / se_diff
   p <- 2 * pnorm(-abs(t))

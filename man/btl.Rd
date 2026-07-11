@@ -14,6 +14,8 @@ btl(
   judge = NULL,
   count = NULL,
   order = NULL,
+  position = FALSE,
+  anchors = NULL,
   ties = c("drop", "half", "error"),
   thresholds = c("free", "pc"),
   maxit = 60,
@@ -63,6 +65,29 @@ verdicts on the same object -- response dependence in the sense of
 Marais and Andrich 2008), estimated jointly with the locations and
 reported in \code{dependence}. Incompatible with
 \code{ties = "half"}.}
+
+\item{position}{Logical: when \code{TRUE}, \code{object_a} is taken as the
+first-presented (left) object of every comparison and a first-position
+advantage is estimated -- a single coefficient, in logits, added to
+every comparison's location difference, the pure positional form of the
+Davidson and Beaver (1977) within-pair order-effect device. It is
+reported in \code{dependence} with \code{effect = "position"} (every
+comparison is informative, so \code{n_informative} is the total weighted
+comparison count) and estimated jointly with the locations, alongside the
+exposure and carry-over effects when \code{order} is also given.
+Identification comes from triangle closure (K >= 3), so the constant
+oriented covariate is estimable even when each pair has a fixed
+orientation, though weakly. Note that \code{ties = "half"} duplicates
+rows in the same orientation, so the first position stays well defined.}
+
+\item{anchors}{Optional named numeric vector for equating: names are object
+names, values are fixed locations in logits. The named objects are held
+exactly at those locations and the remaining objects are estimated freely
+with no sum-zero constraint -- the origin and scale come from the anchors,
+exactly as an anchored \code{\link{rasch}} calibration works. Anchored
+objects report a standard error of zero (their location is a constant, not
+an estimate). An anchored object that is undefeated or winless is an error,
+not silently removed as a free boundary object would be.}
 
 \item{ties}{How to treat ties in the dichotomous analysis:
 \code{"drop"} (default, removed with a note), \code{"half"} (half a
@@ -148,4 +173,8 @@ Bradley, R. A. and Terry, M. E. (1952). Rank analysis of
   On extending the Bradley-Terry model to accommodate ties in paired
   comparison experiments. Journal of the American Statistical
   Association, 65(329), 317-328.
+
+  Davidson, R. R., & Beaver, R. J. (1977). On extending the Bradley-Terry
+  model to incorporate within-pair order effects. Biometrics, 33(4),
+  693-702.
 }

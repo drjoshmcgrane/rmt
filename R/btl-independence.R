@@ -667,7 +667,7 @@ plot_btl_judge_map <- function(fit, judge, min_n = 1L, flag_z = 1.96, ...) {
                    yr + c(-1, 1) * (0.12 * diff(yr) + 0.2),
                    "Matchup residual   (backed the underdog  <-  0  ->  as expected)",
                    "Object location (logits)",
-                   main = sprintf("Judge %s  ·  %d matchups",
+                   main = sprintf("Judge %s  \u00b7  %d matchups",
                                   jp$judge, nrow(p)))
   on.exit(par(op))
   u <- par("usr")

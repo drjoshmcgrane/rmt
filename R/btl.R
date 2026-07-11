@@ -589,6 +589,11 @@ plot_btl <- function(fit, band = 2.5) {
     Bmat <- matrix(0, K, length(free))
     Bmat[cbind(free, seq_along(free))] <- 1
     beta0 <- numeric(K); beta0[apos] <- as.numeric(anch)
+    # start the free objects AT the anchored scale's centre, as pcml's
+    # anchored path shifts its start values: beginning at 0 when the anchors
+    # sit several logits away sends the undamped Newton step into the
+    # logistic tails and diverges, though the maximum is finite
+    beta0[free] <- mean(as.numeric(anch))
     notes <- c(notes, sprintf(
       "%d object(s) anchored; scale origin from anchors", length(anch)))
   }
@@ -699,6 +704,11 @@ plot_btl <- function(fit, band = 2.5) {
       mo <- moments(beta, tfree, dep)
       gh <- gH(mo)
       step <- solve(gh$H, gh$g)
+      # trust-region damp: an undamped Newton step of many logits overshoots
+      # into the flat logistic tails (seen with distant anchors); inert for
+      # ordinary fits, whose steps are far smaller
+      ms <- max(abs(step))
+      if (is.finite(ms) && ms > 5) step <- step * (5 / ms)
       beta <- beta + drop(Bmat %*% step[1:nb])
       if (q) tfree <- tfree + step[(nb + 1L):(nb + q)]
       if (pz) dep <- dep + step[(nb + q + 1L):np]
@@ -743,6 +753,12 @@ plot_btl <- function(fit, band = 2.5) {
     Gm[, (nb + 1L):(nb + q)] <- acc(st_tau, cidx, nc)
   }
   if (pz) Gm[, (nb + q + 1L):np] <- acc(Z * resE, cidx, nc)
+  # count-weighted rows with NO judge stand for w INDEPENDENT comparisons,
+  # each its own cluster: the meat must accumulate w * (x - E)^2 per row,
+  # not (w * (x - E))^2 -- the per-row scores carry w, so divide by sqrt(w)
+  # (with a judge the w replicates share the judge's cluster, where the
+  # summed score w * (x - E) is exactly right and nothing is rescaled)
+  if (is.null(jd)) Gm <- Gm / sqrt(w)
   H <- gh$H
   Hi <- solve(H)
   covth <- Hi %*% crossprod(Gm) %*% Hi

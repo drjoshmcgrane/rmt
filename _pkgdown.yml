@@ -131,6 +131,9 @@ reference:
   - btl_dif
   - btl_transitivity
   - btl_dimensionality
+  - btl_equate
+  - btl_information
+  - btl_next_pairs
   - judge_surprise
   - judge_pair_surprise
   - plot_btl
@@ -141,6 +144,8 @@ reference:
   - plot_btl_scree
   - plot_btl_dim_map
   - plot_btl_judge_map
+  - plot_btl_equate
+  - plot_btl_targeting
 
 - title: Plots
   desc: One plotting function per display, all base graphics.

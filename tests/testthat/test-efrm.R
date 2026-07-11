@@ -4,6 +4,7 @@ simEF <- function(th, tau, r) {
 }
 
 test_that("EFRM recovers person-group units (one set, four groups)", {
+  skip_on_cran()   # heavy simulation; verified locally and on CI
   set.seed(7); L <- 20; per_g <- 400
   phi_true <- c(0.6, 0.9, 1.1, 1.5); phi_true <- phi_true / exp(mean(log(phi_true)))
   d <- scale(seq(-2, 2, length.out = L), scale = FALSE)[, 1]
@@ -109,6 +110,7 @@ test_that("unlinked structures produce informative errors", {
 })
 
 test_that("phi sandwich SEs track the sampling variability", {
+  skip_on_cran()   # heavy simulation; verified locally and on CI
   set.seed(11); L <- 12; per_g <- 250
   phi_true <- c(0.75, 4 / 3); phi_true <- phi_true / exp(mean(log(phi_true)))
   d <- seq(-1.5, 1.5, length.out = L)
@@ -215,6 +217,7 @@ test_that("EFRM honours the -1 missing code", {
 })
 
 test_that("EFRM standard error methods are coherent", {
+  skip_on_cran()   # heavy simulation; verified locally and on CI
   set.seed(15); Np <- 500
   alpha_true <- c(0.75, 4 / 3); alpha_true <- alpha_true / exp(mean(log(alpha_true)))
   sets <- rep(1:2, each = 6)

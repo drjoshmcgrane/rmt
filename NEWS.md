@@ -1,3 +1,58 @@
+# rasch 1.8.0
+
+Three further paired-comparison analogues of the Rasch tool set, and CRAN
+housekeeping.
+
+* Anchored estimation for paired comparisons: `btl(anchors = c(Object =
+  value, ...))` holds the named objects at fixed locations and estimates
+  the rest on that scale (no sum-zero constraint; anchored objects report
+  se 0) -- the equating workflow's second half, mirroring
+  `rasch(anchors=)`. An anchored object at a response boundary is an
+  error rather than a silent removal.
+* First-position advantage: `btl(position = TRUE)` estimates the pure
+  positional (first/left-presented) advantage of the Davidson & Beaver
+  (1977) order-effect device as a constant covariate alongside any
+  exposure and carry-over effects; it is identified by triangle closure
+  even under fixed presentation orders (more weakly, with honest SEs).
+  The dimensionality reference simulation carries the fitted coefficient.
+* Common-object equating: `btl_equate()` compares two paired-comparison
+  calibrations (or a calibration against a bank) through their common
+  objects -- precision-weighted origin shift, per-object drift t-tests
+  with multiplicity adjustment, equated locations -- with
+  `plot_btl_equate()`; the standards-maintenance workflow of comparative
+  judgement across panels or years.
+* Targeting and adaptive pairing: `btl_information()` (per-comparison
+  Fisher information and per-object design information, with the naive
+  1/sqrt(information) SE beside the judge-clustered sandwich),
+  `plot_btl_targeting()`, and `btl_next_pairs()` -- the greedy
+  most-informative-next-pair step of adaptive comparative judgement
+  (Pollitt 2012), with the Bramley (2015) reliability-inflation caution
+  documented.
+* CRAN housekeeping: pure-ASCII sources, quoted 'shiny' in DESCRIPTION,
+  heavy Monte-Carlo recovery tests wrapped in `skip_on_cran()` (they run
+  locally and on CI), and `cran-comments.md` drafted from a full
+  `--as-cran` check (about 3 minutes; slowest example 1.4s).
+* An adversarial verification round over the new features also caught and
+  fixed a PRE-EXISTING inference bug: `btl(count=)` inflated every sandwich
+  standard error by about the square root of the count (the meat weighted
+  aggregated rows twice; point estimates were always correct). Count-
+  weighted fits now reproduce the expanded-data standard errors exactly;
+  OSI and all z/p values follow. Additionally from that round:
+  `btl_equate()`'s shift standard error now uses the stored covariance of
+  each calibration (it treated the common-object differences as
+  independent, overstating the SE several-fold; 95 per cent coverage
+  verified) and documents the majority-drift limitation of single-shift
+  equating; `btl_next_pairs()` ranks by the exact one-step reduction in
+  total location variance (a Sherman-Morrison update on the fit's
+  covariance), verified to beat low-priority pairs empirically; and
+  `btl_information()`'s `se_naive` is documented honestly as a
+  single-parameter lower bound rather than an independence benchmark.
+* Shiny app: the Targeting and Equating tabs gain paired-comparison
+  variants (design information + targeting plot + adaptive next-pair
+  recommendations; reference-calibration upload with drift table and
+  plot), and the Data roles gain a first-position-advantage switch and an
+  object-anchors upload.
+
 # rasch 1.7.1
 
 A statistical audit of the new simulation and paired-comparison
