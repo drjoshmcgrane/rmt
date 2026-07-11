@@ -779,3 +779,31 @@ test_that("judge_pair_surprise flags the matchups a judge got against the grain"
   expect_no_error(plot_btl_judge_map(f, "J1"))
   expect_error(judge_pair_surprise(f, "nobody"), "no comparisons")
 })
+
+test_that("btl_dimensionality is calibrated and powered on non-cyclic 2-D data", {
+  # two camps of judges ranking by two ORTHOGONAL attributes -- an
+  # interpretable multidimensionality the bimension method is not tuned for
+  K <- 8; njudge <- 12; objs <- sprintf("O%d", 1:K)
+  jids <- sprintf("J%d", 1:njudge); pr <- t(combn(objs, 2))
+  set.seed(99); u0 <- rnorm(K); v0 <- resid(lm(rnorm(K) ~ u0))
+  u <- as.numeric(scale(u0)) * 1.3; v <- as.numeric(scale(v0)) * 1.3
+  sim <- function(seed, twoD, s, nper) {
+    set.seed(seed)
+    d <- data.frame(a = rep(pr[, 1], each = nper), b = rep(pr[, 2], each = nper))
+    d$judge <- sample(jids, nrow(d), TRUE)
+    camp <- setNames(rep(c("u", "v"), length.out = njudge), jids)
+    useu <- if (twoD) camp[d$judge] == "u" else rep(TRUE, nrow(d))
+    ai <- ifelse(useu, u[match(d$a, objs)], v[match(d$a, objs)])
+    aj <- ifelse(useu, u[match(d$b, objs)], v[match(d$b, objs)])
+    d$win <- ifelse(runif(nrow(d)) < plogis(s * (ai - aj)), d$a, d$b)
+    btl(d, "a", "b", "win", judge = "judge")
+  }
+  # genuine 2-D structure is flagged, with the leading bimension dominant
+  d2 <- btl_dimensionality(sim(1, TRUE, 2.4, 70), reps = 80)
+  expect_true(d2$leading_structured)
+  expect_gt(d2$bimensions$strength[1], d2$reference$p95)
+  expect_gt(d2$bimensions$prop_residual[1], 0.5)
+  # a single-attribute (truly 1-D) fit is not flagged, even well separated
+  d1 <- btl_dimensionality(sim(7, FALSE, 1.6, 40), reps = 80)
+  expect_false(d1$leading_structured)
+})
