@@ -228,7 +228,7 @@ rasch <- function(data, model = c("PCM", "RSM"), id = NULL, factors = NULL,
                     sprintf("thresholds estimated through %d principal component(s); see est$components",
                             pc_components))
   fit <- .assemble_fit(model, X, est, id_vec, fac_df, n_groups, adjust_N,
-                       prep$notes)
+                       c(prep$notes, est$notes))
   fit$mc <- mc
   fit
 }
@@ -289,8 +289,12 @@ rasch <- function(data, model = c("PCM", "RSM"), id = NULL, factors = NULL,
 
   # --- item table ----------------------------------------------------------
   loc <- vapply(tau_list, mean, 0)
+  weak_thr <- if (is.null(thr$weak)) rep(FALSE, nrow(thr)) else thr$weak
   se_loc <- vapply(seq_len(L), function(i) {
     rows <- thr$id[thr$item == i]
+    # a weakly determined threshold (sparse adjacent category) makes the
+    # ridged covariance block spuriously small: report NA, not a number
+    if (any(weak_thr[thr$item == i])) return(NA_real_)
     # anchored items have a structurally zero variance that floating-point
     # noise can render as a tiny negative number on some BLAS builds
     sqrt(max(mean(est$cov_tau[rows, rows]), 0))

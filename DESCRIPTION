@@ -1,7 +1,7 @@
 Package: rasch
 Type: Package
 Title: Pairwise Conditional Rasch Measurement Analysis and Diagnostics
-Version: 1.9.2
+Version: 1.9.3
 Authors@R: person("Josh", "McGrane", role = c("aut", "cre"),
     email = "drjoshmcgrane@gmail.com")
 Description: Pairwise conditional maximum likelihood estimation of dichotomous

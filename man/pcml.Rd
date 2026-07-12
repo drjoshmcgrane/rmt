@@ -8,7 +8,12 @@ pcml(X, model = c("PCM", "RSM"), anchors = NULL, maxit = 60, tol = 1e-08)
 }
 \arguments{
 \item{X}{Persons-by-items integer score matrix (categories from 0). Missing
-values are handled by pairwise deletion.}
+values are handled by pairwise deletion, so linked booklet designs and
+random missingness estimate without imputation; the item-pair graph must
+be connected (some person answering items in both of any two blocks),
+otherwise relative locations between blocks are unidentified and the fit
+stops with an error naming the blocks -- unless \code{anchors} fix an
+item in every block, the disjoint-form equating case.}
 
 \item{model}{\code{"PCM"} or \code{"RSM"}.}
 
@@ -24,10 +29,14 @@ recentring is applied. PCM only.}
 }
 \value{
 A list with the threshold table \code{thr} (columns \code{id},
-  \code{item}, \code{k}, \code{tau}, \code{se}, \code{anchored}), the
+  \code{item}, \code{k}, \code{tau}, \code{se}, \code{anchored}, and
+  \code{weak} -- \code{TRUE} for a threshold adjacent to a category with
+  fewer than 3 responses, whose estimate can run toward a boundary while
+  the ridged covariance understates the error; its \code{se} is reported
+  as \code{NA} and a note names the item and category), the
   threshold covariance matrix \code{cov_tau}, the pairwise conditional
-  log-likelihood, the iteration count, a convergence flag, and the
-  max-score vector \code{m}.
+  log-likelihood, the iteration count, a convergence flag, \code{notes},
+  and the max-score vector \code{m}.
 }
 \description{
 Maximises the pairwise conditional likelihood, in which the person

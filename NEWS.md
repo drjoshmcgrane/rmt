@@ -1,3 +1,26 @@
+# rasch 1.9.3
+
+* Missing-data identification, verified and enforced. A booklet-design probe
+  (zero complete cases, linked forms, MCAR on top) confirmed the pairwise
+  conditional estimator recovers planted parameters with nominal coverage --
+  and exposed two silent failure modes at the design's edges, both now honest:
+* Disconnected designs error instead of fitting. When no person answers
+  items in more than one block, the pairwise likelihood is flat in the
+  between-block shift; the fit used to return arbitrary cross-block spacing
+  (within-block orders fine, origins meaningless) with no warning. `pcml()`,
+  `pcml_pc()`, and everything built on them now stop with an error naming
+  the disconnected blocks. Anchors rescue a block (disjoint-form equating):
+  with an anchored item in every block the fit proceeds; with any block
+  unanchored it stops and names it.
+* Thresholds beside near-empty categories report NA, not a lie. A category
+  with 1-2 responses can send its threshold toward a boundary (observed: a
+  single top-category response put an item location at +13.9 logits) while
+  the ridged covariance printed SE = 0. Such thresholds are now flagged
+  (`thr$weak`), their SEs and the item-location SE reported as NA, and a
+  note names the item, the category, and its count, pointing to
+  `pc_components` or category collapsing. Estimates are still returned;
+  categories with zero responses are rescored away as before.
+
 # rasch 1.9.2
 
 * Case study: `inst/casestudies/party_blocs_crisis.R` applies `btl_efrm()`

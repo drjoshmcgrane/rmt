@@ -49,6 +49,65 @@ threshold_index <- function(m) {
 }
 
 # ---------------------------------------------------------------------------
+# Structural identification checks, run before solving. The pairwise
+# conditional likelihood factorises over item pairs, so relative locations
+# between two blocks of items are identified only if some person answered
+# items in both (the item-pair graph is connected); on a disconnected design
+# the likelihood is flat in the between-block shift and Newton lands wherever
+# the ridge sends it -- garbage that must be an error, not a result. Anchors
+# rescue a block: a block containing an anchored item has its origin fixed.
+# ---------------------------------------------------------------------------
+.pcml_check_connected <- function(pairs, L, item_names, anchored = integer(0)) {
+  edges <- if (length(pairs))
+    do.call(rbind, lapply(pairs, function(p) c(p$i, p$j)))
+  else matrix(integer(0), 0L, 2L)
+  comp <- .btlef_components(L, edges)
+  if (length(unique(comp)) == 1L) return(invisible(comp))
+  if (length(anchored)) {
+    bad <- setdiff(unique(comp), unique(comp[anchored]))
+    if (!length(bad)) return(invisible(comp))
+    blocks <- vapply(bad, function(cc)
+      paste(item_names[comp == cc], collapse = ", "), "")
+    stop("the item-pair graph is not connected, and block(s) without an ",
+         "anchored item have no identified origin: ",
+         paste0("{", blocks, "}", collapse = " "),
+         "; link the blocks through common persons or anchor an item in ",
+         "every block", call. = FALSE)
+  }
+  blocks <- tapply(item_names, comp, paste, collapse = ", ")
+  stop("the item-pair graph is not connected: no person answered items in ",
+       "more than one of the blocks ",
+       paste0("{", blocks, "}", collapse = " | "),
+       "; relative locations between the blocks are unidentified -- link ",
+       "them through common items or persons, or anchor item(s) in every ",
+       "block", call. = FALSE)
+}
+
+# A threshold k is informed by the persons observed in its two adjacent
+# categories; when either count is tiny the conditional estimate can run
+# away (a category with one response sends its threshold toward the
+# boundary) while the ridged covariance reports a spuriously small standard
+# error. Flag such thresholds so the caller can report the estimate with an
+# NA standard error and a note naming the cause -- an honest answer, not a
+# manufactured one. Categories with zero responses are the caller's problem
+# (rasch() rescores them away); the danger zone handled here is 1-2.
+.pcml_weak_thresholds <- function(X, m, thr, item_names, min_count = 3L) {
+  flag <- logical(nrow(thr)); notes <- character(0)
+  for (i in seq_len(ncol(X))) {
+    cnt <- tabulate(X[, i] + 1L, nbins = m[i] + 1L)
+    weak_k <- which(pmin(cnt[-length(cnt)], cnt[-1]) < min_count)
+    if (!length(weak_k)) next
+    flag[thr$item == i & thr$k %in% weak_k] <- TRUE
+    kc <- which(cnt < min_count) - 1L
+    notes <- c(notes, sprintf(
+      "item %s: only %s response(s) in category %s; threshold(s) %s and the item location are weakly determined (SE reported as NA) -- consider pc_components or collapsing categories",
+      item_names[i], paste(cnt[kc + 1L], collapse = "/"),
+      paste(kc, collapse = "/"), paste(weak_k, collapse = "/")))
+  }
+  list(flag = flag, notes = notes)
+}
+
+# ---------------------------------------------------------------------------
 # Starting values: weighted least squares on the pairwise log-ratios. Used
 # only to seed Newton-Raphson; the returned estimates always come from the
 # conditional likelihood itself.
@@ -155,8 +214,9 @@ threshold_index <- function(m) {
 # Newton-Raphson on tau = offset + B beta, where B removes the location
 # indeterminacy, imposes the rating scale or facet structure, or restricts
 # estimation to the unanchored thresholds (offset carrying the anchors).
-.pcml_solve <- function(X, thr, m, B, beta0, offset = 0, maxit = 60, tol = 1e-8) {
-  pairs <- .pair_counts(X, m)
+.pcml_solve <- function(X, thr, m, B, beta0, offset = 0, maxit = 60, tol = 1e-8,
+                        pairs = NULL) {
+  if (is.null(pairs)) pairs <- .pair_counts(X, m)
   if (!length(pairs)) stop("no informative item pairs: check the data")
   beta <- beta0
   glh <- .pcml_glh(drop(offset + B %*% beta), thr, pairs, m)
@@ -201,7 +261,12 @@ threshold_index <- function(m) {
 #' \code{tau_ik = delta_i + kappa_k} through the design matrix.
 #'
 #' @param X Persons-by-items integer score matrix (categories from 0). Missing
-#'   values are handled by pairwise deletion.
+#'   values are handled by pairwise deletion, so linked booklet designs and
+#'   random missingness estimate without imputation; the item-pair graph must
+#'   be connected (some person answering items in both of any two blocks),
+#'   otherwise relative locations between blocks are unidentified and the fit
+#'   stops with an error naming the blocks -- unless \code{anchors} fix an
+#'   item in every block, the disjoint-form equating case.
 #' @param model \code{"PCM"} or \code{"RSM"}.
 #' @param anchors Optional anchor table for equating: a data frame with
 #'   columns \code{item} (name or column index), \code{k}, and \code{tau}
@@ -212,10 +277,14 @@ threshold_index <- function(m) {
 #'   recentring is applied. PCM only.
 #' @param maxit,tol Newton-Raphson iteration cap and convergence tolerance.
 #' @return A list with the threshold table \code{thr} (columns \code{id},
-#'   \code{item}, \code{k}, \code{tau}, \code{se}, \code{anchored}), the
+#'   \code{item}, \code{k}, \code{tau}, \code{se}, \code{anchored}, and
+#'   \code{weak} -- \code{TRUE} for a threshold adjacent to a category with
+#'   fewer than 3 responses, whose estimate can run toward a boundary while
+#'   the ridged covariance understates the error; its \code{se} is reported
+#'   as \code{NA} and a note names the item and category), the
 #'   threshold covariance matrix \code{cov_tau}, the pairwise conditional
-#'   log-likelihood, the iteration count, a convergence flag, and the
-#'   max-score vector \code{m}.
+#'   log-likelihood, the iteration count, a convergence flag, \code{notes},
+#'   and the max-score vector \code{m}.
 #' @examples
 #' set.seed(1)
 #' d <- seq(-1.5, 1.5, length.out = 6)
@@ -231,6 +300,9 @@ pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL,
   X <- as.matrix(X); storage.mode(X) <- "integer"
   m <- apply(X, 2, max, na.rm = TRUE); L <- ncol(X)
   thr <- threshold_index(m); M <- nrow(thr)
+  inames <- if (is.null(colnames(X))) paste0("V", seq_len(L)) else colnames(X)
+  pairs <- .pair_counts(X, m)
+  weak <- .pcml_weak_thresholds(X, m, thr, inames)
 
   if (!is.null(anchors)) {
     if (model != "PCM") stop("anchoring is supported for the PCM only")
@@ -286,14 +358,18 @@ pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL,
     B <- do.call(cbind, lapply(blocks, `[[`, "B"))
     beta0 <- unlist(lapply(blocks, `[[`, "beta0"), use.names = FALSE)
 
+    .pcml_check_connected(pairs, L, inames,
+                          anchored = unique(c(ft_item, mean_items)))
     sol <- .pcml_solve(X, thr, m, B, beta0, offset = offset,
-                       maxit = maxit, tol = tol)
+                       maxit = maxit, tol = tol, pairs = pairs)
     thr$tau <- sol$tau; thr$se <- sol$se_tau; thr$se[a_id] <- 0
     thr$anchored <- seq_len(M) %in% a_id | thr$item %in% mean_items
+    thr$weak <- weak$flag & !thr$anchored
+    thr$se[thr$weak] <- NA_real_
     return(list(model = model, thr = thr, cov_tau = sol$cov_tau,
                 loglik = sol$loglik, iterations = sol$iterations,
                 converged = sol$converged, m = m, anchors = anchors,
-                n_parameters = ncol(B)))
+                n_parameters = ncol(B), notes = weak$notes))
   }
 
   if (model == "RSM") {
@@ -323,17 +399,21 @@ pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL,
     beta0 <- st[-M] - mean(st)
   }
 
-  sol <- .pcml_solve(X, thr, m, B, beta0, maxit = maxit, tol = tol)
+  .pcml_check_connected(pairs, L, inames)
+  sol <- .pcml_solve(X, thr, m, B, beta0, maxit = maxit, tol = tol,
+                     pairs = pairs)
   # recentre so the mean item location is zero
   loc <- vapply(seq_len(L), function(i) mean(sol$tau[thr$item == i]), 0)
   sol$tau <- sol$tau - mean(loc)
   thr$tau <- sol$tau; thr$se <- sol$se_tau; thr$anchored <- FALSE
+  thr$weak <- weak$flag
+  thr$se[thr$weak] <- NA_real_
 
   list(model = model, thr = thr, cov_tau = sol$cov_tau,
        loglik = sol$loglik, iterations = sol$iterations,
        converged = sol$converged, m = m, anchors = NULL,
        n_parameters = ncol(B), B = B, cov_beta = sol$cov_beta,
-       H_beta = sol$H_beta)
+       H_beta = sol$H_beta, notes = weak$notes)
 }
 
 # ---------------------------------------------------------------------------
@@ -467,7 +547,11 @@ pcml_pc <- function(X, n_components = 4, maxit = 60, tol = 1e-8) {
   loc <- loc - mean(loc)
   beta0 <- c(loc[-L], numeric(sum(extra)))
 
-  sol <- .pcml_solve(X, thr, m, B, beta0, maxit = maxit, tol = tol)
+  inames <- if (is.null(colnames(X))) paste0("V", seq_len(L)) else colnames(X)
+  pairs <- .pair_counts(X, m)
+  .pcml_check_connected(pairs, L, inames)
+  sol <- .pcml_solve(X, thr, m, B, beta0, maxit = maxit, tol = tol,
+                     pairs = pairs)
   thr$tau <- sol$tau; thr$se <- sol$se_tau
 
   labs <- c("spread", "skewness", "kurtosis")
