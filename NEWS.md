@@ -1,3 +1,18 @@
+# rasch 1.10.2
+
+* App: hover identification is now consistent across the app, through one
+  shared mechanism. Beyond the person-fit plot and item fit map, hovering
+  identifies the point (or cell) on: the Guttman scalogram (person, item,
+  score), both residual-correlation heatmaps (item pair and its Q3/Q3*),
+  the common-item equating plot and the tailored-analysis comparison
+  (item, reference and current locations), and -- for paired comparisons --
+  the unexpected-judgements map (matchup, surprise, location), the
+  group characteristic curves' observed means (object, panel, mean), and
+  the equating plot (object, both calibrations). Every tooltip is resolved
+  server-side against exactly the rows its plot draws. Plots whose points
+  are already labelled (kidmap, Wright map, caterpillars) and curve or
+  distribution displays are deliberately left without hover.
+
 # rasch 1.10.1
 
 * App: hovering a point on the person-fit plot or the item fit map now

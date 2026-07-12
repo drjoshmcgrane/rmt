@@ -723,7 +723,7 @@ panel_summary <- nav_panel("Summary", value = "p_summary", icon = bs_icon("clipb
         plotCard("tif",
           info = "Information across the scale, with the standard error of measurement (SEM = 1/sqrt(information)) overlaid.")),
       accordion_panel("Guttman scalogram", value = "test_guttman",
-        plotCard("guttman", height = "640px")))),
+        plotCard("guttman", height = "640px", hover = TRUE)))),
     # paired-comparison (BTL) fits: the headline value boxes and the
     # test-of-fit summary table
     conditionalPanel("output.is_btl == true",
@@ -933,7 +933,7 @@ panel_persons <- nav_panel("Persons", value = "p_persons", icon = bs_icon("peopl
                       controls = cols_switch("btl_judges_full")),
             plotCard("btl_judge_map", title = "Unexpected judgements",
                      info = "The judge counterpart of the kidmap, matchup by matchup. Each pair the judge met is a segment spanning its two objects on the location axis, placed horizontally by how surprising the verdict was: at 0 (dashed line, inside the shaded band) the stronger object won as its lead predicts; to the left the judge favoured the underdog beyond noise. The filled dot marks the object the judge's verdict backed - so an upset is a red segment on the left with its filled dot at the lower end.",
-                     height = "460px"))),
+                     height = "460px", hover = TRUE))),
         accordion_panel(
           title = span("Judge consistency",
             info_icon("The paired-comparison counterpart of person fit. A judge whose choices form many preference loops (prefers A over B, B over C, then C over A) is internally inconsistent - not measuring on a single scale. Consistency is 1 minus the judge's circular-triad rate over the chance rate; 1 is one clean order, 0 is guessing.")),
@@ -1108,7 +1108,8 @@ panel_dif <- nav_panel("DIF", value = "p_dif", icon = bs_icon("sliders"),
               info = "ANOVA of the standardised residuals of each object's comparisons, oriented to the object: a significant judge-group effect indicates uniform DIF, a significant group-by-opponent-band interaction non-uniform DIF; probabilities are adjusted across objects by Benjamini-Hochberg. Click a row to see that object's characteristic curves by judge group on the right.",
               footer = uiOutput("bdif_notes")),
             plotCard("bdif_occ", "Characteristic curves by group",
-              info = "The object characteristic curve with the observed mean response per opponent overlaid separately for each judge group: the graphical display of DIF for the object of the selected table row."))),
+              info = "The object characteristic curve with the observed mean response per opponent overlaid separately for each judge group: the graphical display of DIF for the object of the selected table row.",
+              hover = TRUE))),
         accordion_panel("DIF magnitude in logits", value = "bdif_size_panel",
           tableCard("bdif_sizes_tbl",
             note = "Pairwise differences between the resolved per-group locations, in logits, with Benjamini-Hochberg adjustment across objects; differences of at least 0.5 logits are flagged as practically significant.")))
@@ -1150,7 +1151,8 @@ panel_equating <- nav_panel("Equating", value = "p_equating", icon = bs_icon("ar
           tableCard("btl_eq_tbl", "Common-object comparison",
             info = "Each common object is tested against the shifted identity line after the precision-weighted origin shift (the two sum-zero scales are centred on different object sets). A drifting object weakens the link; p_adj is the multiplicity-adjusted drift p-value, shown red below 0.05."),
           plotCard("btl_eq_plot", "Equating plot",
-            info = "The two calibrations' common-object locations against the shifted identity line, with per-object error bars and a dotted guide band at the average pooled precision; objects that drift after the multiplicity adjustment are highlighted and labelled."))
+            info = "The two calibrations' common-object locations against the shifted identity line, with per-object error bars and a dotted guide band at the average pooled precision; objects that drift after the multiplicity adjustment are highlighted and labelled.",
+            hover = TRUE))
       )
     ),
     conditionalPanel("output.is_btl != true",
@@ -1200,7 +1202,15 @@ panel_equating <- nav_panel("Equating", value = "p_equating", icon = bs_icon("ar
             p(class = "text-muted small mb-0",
               "Upload a reference calibration (or choose a kept fit) to see the equating plot.")),
           conditionalPanel("output.has_eq == true",
-            plotOutput("eq_plot", height = "560px"), rcode_details("eq_plot")),
+            # hand-built card (not plotCard()): the same hover = TRUE wiring
+            # plotCard() adds -- a hoverOpts plotOutput in a position:relative
+            # div, with the tip floated over it by output$eq_plot_tip.
+            div(style = "position: relative",
+                plotOutput("eq_plot", height = "560px",
+                           hover = hoverOpts("eq_plot_hover", delay = 60,
+                                             delayType = "throttle")),
+                uiOutput("eq_plot_tip")),
+            rcode_details("eq_plot")),
           padding = 8, fillable = FALSE))
     ))
   )
@@ -1396,11 +1406,11 @@ panel_ld <- nav_panel("Local", value = "p_ld", icon = bs_icon("link-45deg"),
         layout_columns(col_widths = breakpoints(sm = 12, lg = c(6, 6)),
           tableCard("cormat_q3_tbl", title = "Q3 correlations",
                     info = "The residual correlation of every item pair, with 1.00 on the diagonal (Yen 1984). Pairs with |Q3| at or above the threshold are red (Yen 1993)."),
-          plotCard("rcor_q3", height = "auto")),
+          plotCard("rcor_q3", height = "auto", hover = TRUE)),
         layout_columns(col_widths = breakpoints(sm = 12, lg = c(6, 6)),
           tableCard("cormat_q3s_tbl", title = "Adjusted Q3 (Q3*)",
                     info = "Each Q3 less the average off-diagonal Q3: 0 marks local independence. Pairs with Q3* at or above the threshold are red (Christensen, Makransky & Horton 2017)."),
-          plotCard("rcor_q3s", height = "auto"))),
+          plotCard("rcor_q3s", height = "auto", hover = TRUE))),
       accordion_panel("Response dependence magnitude", value = "ld_dep",
         card(
           full_screen = TRUE,
@@ -1477,7 +1487,7 @@ panel_guess <- nav_panel("Guessing", value = "p_guess", icon = bs_icon("question
              card_body(verbatimTextOutput("guess_txt"))),
         tableCard("guess_tbl", "Initial vs tailored calibration",
                   "shift = tailored minus origin-equated location; z > 1.96 flags items significantly harder after tailoring (a guessing signature).")),
-      plotCard("guess_plot", "Tailored vs origin-equated calibrations")
+      plotCard("guess_plot", "Tailored vs origin-equated calibrations", hover = TRUE)
     )
   )
 
@@ -2793,6 +2803,62 @@ server <- function(input, output, session) {
         })
     })
   }
+  # -------------------------------------------------- hover identification --
+  # shared server-side plumbing for `plotCard(id, hover = TRUE)` (see its
+  # definition for the client-side half: the hoverOpts plotOutput and the
+  # floating uiOutput tip). Two shapes cover every hover-enabled plot in the
+  # app: `register_hover_tip()` for ordinary scatter plots (nearPoints()
+  # against a reproduction of the exact rows the plot draws), and
+  # `register_hover_cormat()` for the symmetric item-by-item heatmaps, where
+  # the hovered cell is looked up directly rather than nearest-matched.
+  #
+  # `data_fun()` must return a data frame with an `xvar`/`yvar` column pair in
+  # exactly the same units and after exactly the same filtering as the plot
+  # function itself (dropped NAs, excluded extremes, min-n screens, ...), so
+  # the point nearest the cursor is always the point actually drawn there.
+  # `label_fun(np)` formats the one-row match into the tooltip text.
+  register_hover_tip <- function(id, data_fun, xvar, yvar, label_fun) {
+    output[[paste0(id, "_tip")]] <- renderUI({
+      hov <- input[[paste0(id, "_hover")]]
+      req(hov)
+      d <- data_fun()
+      req(!is.null(d), nrow(d) > 0)
+      np <- nearPoints(d, hov, xvar = xvar, yvar = yvar,
+                       threshold = 12, maxpoints = 1)
+      if (!nrow(np)) return(NULL)
+      div(class = "rasch-hover-tip",
+          style = sprintf("left:%.0fpx; top:%.0fpx;",
+                          hov$coords_css$x, hov$coords_css$y - 12),
+          label_fun(np))
+    })
+  }
+  # `matrix_fun()` must return the same square, item-named matrix the plot
+  # colours (before capping -- the tooltip shows the true value), so the cell
+  # lookup mirrors plot_resid_cor()'s own layout: x is the column drawn
+  # left-to-right, y is flipped top-to-bottom (image()'s row/column
+  # convention), and the diagonal and lower triangle are masked out exactly
+  # as the heatmap leaves them blank.
+  register_hover_cormat <- function(id, matrix_fun, stat_label) {
+    output[[paste0(id, "_tip")]] <- renderUI({
+      hov <- input[[paste0(id, "_hover")]]
+      req(hov)
+      S <- matrix_fun()
+      req(!is.null(S))
+      L <- ncol(S)
+      row <- round(hov$x); col <- L + 1L - round(hov$y)
+      req(row >= 1, row <= L, col >= 1, col <= L)
+      diag(S) <- NA
+      S[lower.tri(S)] <- NA
+      val <- S[row, col]
+      if (is.na(val)) return(NULL)
+      nms <- colnames(S)
+      div(class = "rasch-hover-tip",
+          style = sprintf("left:%.0fpx; top:%.0fpx;",
+                          hov$coords_css$x, hov$coords_css$y - 12),
+          sprintf("%s · %s · %s %.2f", nms[row], nms[col],
+                  stat_label, val))
+    })
+  }
   # `csv_name` overrides the conventional rasch_<id>.csv download filename;
   # the CSV content is always the full table from `fun` (never the curated
   # on-screen display)
@@ -3528,22 +3594,13 @@ server <- function(input, output, session) {
   # exactly the rows plot_person_fit() draws (theta and fit_resid both
   # non-NA -- see R/plots.R), so the point under the cursor is always the
   # one actually plotted there
-  output$pfit_tip <- renderUI({
-    req(fit())
-    hov <- input$pfit_hover
-    req(hov)
+  register_hover_tip("pfit", function() {
     p <- fit()$person
     ok <- !is.na(p$theta) & !is.na(p$fit_resid)
-    d <- data.frame(id = p$id[ok], theta = p$theta[ok], fit_resid = p$fit_resid[ok])
-    np <- nearPoints(d, hov, xvar = "theta", yvar = "fit_resid",
-                     threshold = 12, maxpoints = 1)
-    if (!nrow(np)) return(NULL)
-    div(class = "rasch-hover-tip",
-        style = sprintf("left:%.0fpx; top:%.0fpx;",
-                        hov$coords_css$x, hov$coords_css$y - 12),
-        sprintf("%s · location %.2f · fit residual %.2f",
-                np$id[1], np$theta[1], np$fit_resid[1]))
-  })
+    data.frame(id = p$id[ok], theta = p$theta[ok], fit_resid = p$fit_resid[ok])
+  }, "theta", "fit_resid", function(np)
+    sprintf("%s · location %.2f · fit residual %.2f",
+            np$id[1], np$theta[1], np$fit_resid[1]))
 
   # ------------------------------------------------------- targeting plots --
   # sidebar-controlled bins and scale range shared by both targeting plots
@@ -3574,20 +3631,9 @@ server <- function(input, output, session) {
                 code = function() "plot_item_map(fit)")
   # hover identification for the item fit map: nearPoints() against
   # fit()$items (plot_item_map() draws every item -- no filtering)
-  output$imap_tip <- renderUI({
-    req(fit())
-    hov <- input$imap_hover
-    req(hov)
-    d <- fit()$items
-    np <- nearPoints(d, hov, xvar = "location", yvar = "fit_resid",
-                     threshold = 12, maxpoints = 1)
-    if (!nrow(np)) return(NULL)
-    div(class = "rasch-hover-tip",
-        style = sprintf("left:%.0fpx; top:%.0fpx;",
-                        hov$coords_css$x, hov$coords_css$y - 12),
-        sprintf("%s · location %.3f · fit residual %.2f",
-                np$item[1], np$location[1], np$fit_resid[1]))
-  })
+  register_hover_tip("imap", function() fit()$items, "location", "fit_resid",
+    function(np) sprintf("%s · location %.3f · fit residual %.2f",
+                         np$item[1], np$location[1], np$fit_resid[1]))
   register_plot("rdist_i", function() plot_resid_dist(fit(), "items"),
                 code = function() 'plot_resid_dist(fit, "items")')
   # Test-page scale range (default -6..6 matches the functions' own default,
@@ -3606,6 +3652,37 @@ server <- function(input, output, session) {
                 code = function() paste0("plot_tif(fit", ts_code_arg(), ")"))
   register_plot("guttman", function() plot_guttman(fit()), h = 7,
                 code = function() "plot_guttman(fit)")
+  # hover identification for the Guttman scalogram: neither axis is labelled
+  # (persons are thinned to at most 80 rows and never named; items are
+  # labelled but only along the x-axis), so a cell's person and item are
+  # otherwise unreadable. Reproduces plot_guttman()'s own thinning of
+  # guttman_table(fit)$matrix (max_persons = 80, its default and the app's
+  # only call), then maps the hovered data-space cell to (row, col) exactly
+  # as image() lays the matrix out: x is the item column left-to-right, y is
+  # the person row flipped top-to-bottom -- see R/guttman.R.
+  guttman_res <- reactive({
+    g <- guttman_table(fit())
+    G <- g$matrix
+    N <- nrow(G)
+    if (N > 80) G <- G[round(seq(1, N, length.out = 80)), , drop = FALSE]
+    G
+  })
+  output$guttman_tip <- renderUI({
+    hov <- input$guttman_hover
+    req(hov)
+    G <- guttman_res()
+    req(!is.null(G))
+    L <- ncol(G); rN <- nrow(G)
+    item_idx <- round(hov$x); person_row <- round(hov$y)
+    req(item_idx >= 1, item_idx <= L, person_row >= 1, person_row <= rN)
+    person_idx <- rN + 1L - person_row
+    val <- G[person_idx, item_idx]
+    div(class = "rasch-hover-tip",
+        style = sprintf("left:%.0fpx; top:%.0fpx;",
+                        hov$coords_css$x, hov$coords_css$y - 12),
+        sprintf("%s · %s · score %s", rownames(G)[person_idx],
+                colnames(G)[item_idx], if (is.na(val)) "missing" else val))
+  })
 
   # ------------------------------------------------------------------ DIF --
   dif_alpha <- reactive(clamp01(input$dif_alpha, 0.05))
@@ -3940,6 +4017,24 @@ server <- function(input, output, session) {
                 function() plot_btl_judge_map(bfit(), sel_judge()),
                 w = 7, h = 5.5, code = function()
                   sprintf('plot_btl_judge_map(bt, "%s")', sel_judge()))
+  # hover identification for the unexpected-judgements map: only the
+  # surprising matchups are text-labelled on the plot (see R/btl-independence.R),
+  # so most of the two points per matchup (the stronger and weaker object's
+  # ends of each segment) are otherwise anonymous. judge_pair_surprise() is
+  # the same call plot_btl_judge_map() makes internally, with its own
+  # defaults (min_n = 1, flag_z = 1.96), which the app never overrides.
+  btl_judge_pairs_res <- reactive(judge_pair_surprise(bfit(), sel_judge()))
+  register_hover_tip("btl_judge_map", function() {
+    p <- btl_judge_pairs_res()$pairs
+    req(nrow(p) > 0)
+    rbind(
+      data.frame(z = p$z, y = p$loc_hi, object = p$object_hi,
+                opponent = p$object_lo, stringsAsFactors = FALSE),
+      data.frame(z = p$z, y = p$loc_lo, object = p$object_lo,
+                opponent = p$object_hi, stringsAsFactors = FALSE))
+  }, "z", "y", function(np)
+    sprintf("%s vs %s · residual %+.2f · location %.2f",
+            np$object[1], np$opponent[1], np$z[1], np$y[1]))
   register_plot("btl_plot", function() plot_btl(bfit()),
                 code = function() "# bt from the Data page\nplot_btl(bt)")
   # object characteristic curve: model expected response against opponent
@@ -4140,22 +4235,39 @@ server <- function(input, output, session) {
               r$shift, r$shift_se, r$n_common,
               if (r$n_common == 1L) "" else "s"))
   })
+  # surface a failed btl_equate() as its own message. need()'s `message` is
+  # forced eagerly (shiny::need calls force(message)), so conditionMessage(r)
+  # must sit behind the inherits() guard -- inside need() it would also be
+  # evaluated on a SUCCESSFUL equate and error on the non-condition object.
+  bt_eq_ok <- function() {
+    r <- bt_equate()
+    if (inherits(r, "error")) validate(need(FALSE, conditionMessage(r)))
+    r
+  }
   register_table("btl_eq_tbl", function() {
-    r <- bt_equate(); validate(need(!inherits(r, "error"), conditionMessage(r)))
-    r$table
+    bt_eq_ok()$table
   }, function() {
-    r <- bt_equate(); validate(need(!inherits(r, "error"), conditionMessage(r)))
-    d <- r$table
+    d <- bt_eq_ok()$table
     style_lo_red(num_dt(d), d, "p_adj", 0.05)
   }, code = function()
     sprintf('bank <- read.csv(%s)  # columns: object, location, se\nbtl_equate(bt, bank)$table',
             qstr(input$bt_eq_file$name %||% "reference.csv")))
   register_plot("btl_eq_plot", function() {
-    r <- bt_equate(); validate(need(!inherits(r, "error"), conditionMessage(r)))
+    bt_eq_ok()
     plot_btl_equate(bfit(), bt_eq_bank())
   }, w = 8, h = 6, code = function()
     sprintf('bank <- read.csv(%s)\nplot_btl_equate(bt, bank)',
             qstr(input$bt_eq_file$name %||% "reference.csv")))
+  # hover identification for the equating plot: only drifting objects are
+  # text-labelled (see plot_btl_equate(), R/btl-equating.R); bt_equate()$table
+  # is the exact table plot_btl_equate() draws from (same fit1/fit2, no extra
+  # args either call), so reusing it guarantees identical rows.
+  register_hover_tip("btl_eq_plot", function() {
+    r <- bt_equate(); req(!inherits(r, "error"))
+    r$table
+  }, "location_2", "location_1", function(np)
+    sprintf("%s · calibration 2 %.3f · calibration 1 %.3f",
+            np$object[1], np$location_2[1], np$location_1[1]))
 
   # -------------------------------------------- BTL DIF by judge group --
   # the judge grouping handed to btl_dif() / plot_btl_icc(): the nominated
@@ -4199,6 +4311,36 @@ server <- function(input, output, session) {
     js <- names(maps[[1]])
     setNames(do.call(paste, c(lapply(vars, function(v) maps[[v]][js]),
                               sep = ":")), js)
+  }
+  # the per-opponent, per-group means the *grouped* branch of plot_btl_icc()
+  # draws for the DIF overlay (R/btl.R) -- unlike the ungrouped OCC, that
+  # branch never text-labels its points, so hover is the only way to read an
+  # opponent off the plot. Mirrors that branch's aggregation (including its
+  # min_n = 10 default, which the app's plot_btl_icc() call never overrides)
+  # exactly, so the reproduced rows match what is actually drawn.
+  bdif_occ_points <- function(fit, object, group, min_n = 10) {
+    ob <- fit$objects
+    m <- if (is.null(fit$m)) 1L else fit$m
+    cm <- fit$comparisons
+    gv <- if (length(group) == nrow(cm)) as.character(group) else
+      unname(as.character(group)[match(cm$judge, names(group))])
+    sel_a <- cm$object_a == object; sel_b <- cm$object_b == object
+    opp <- c(cm$object_b[sel_a], cm$object_a[sel_b])
+    resp <- c(cm$response[sel_a], m - cm$response[sel_b])
+    wt <- c(cm$weight[sel_a], cm$weight[sel_b])
+    gg <- c(gv[sel_a], gv[sel_b])
+    keep <- opp %in% ob$object & !is.na(gg)
+    opp <- opp[keep]; resp <- resp[keep]; wt <- wt[keep]; gg <- gg[keep]
+    levs <- sort(unique(gg))
+    do.call(rbind, lapply(levs, function(lv) {
+      sel <- gg == lv
+      nn <- tapply(wt[sel], opp[sel], sum)
+      om <- tapply(wt[sel] * resp[sel], opp[sel], sum) / nn
+      om <- om[nn >= min_n]
+      data.frame(opponent = names(om),
+                location = ob$location[match(names(om), ob$object)],
+                mean = as.numeric(om), group = lv, stringsAsFactors = FALSE)
+    }))
   }
   # backtick nonsyntactic column names in emitted code
   bq <- function(s) ifelse(grepl("^[a-zA-Z.][a-zA-Z0-9._]*$", s),
@@ -4337,6 +4479,14 @@ server <- function(input, output, session) {
                    paste(sprintf('"%s"', vars), collapse = ", ")),
            sprintf('plot_btl_icc(bt, "%s", group = grp)', sb$object %||% ""))
   })
+  register_hover_tip("bdif_occ", function() {
+    b <- bfit(); sb <- sel_bdif(); req(sb$object %in% b$objects$object)
+    grp <- tryCatch(bdif_term_group(sb$term), error = function(e) NULL)
+    req(!is.null(grp))
+    bdif_occ_points(b, sb$object, grp)
+  }, "location", "mean", function(np)
+    sprintf("%s (%s) · location %.3f · mean %.2f",
+            np$opponent[1], np$group[1], np$location[1], np$mean[1]))
 
   # ---------------------------------------------------------------- facets --
   facet_dat <- reactive({
@@ -4415,6 +4565,14 @@ server <- function(input, output, session) {
     code = function()
       sprintf('plot_equate(fit, reference, shift = "%s")',
               input$eq_shift %||% "mean"))
+  # hover identification for the equating plot: only drifting items are
+  # text-labelled (see plot_equate(), R/equating.R); eq_res()$table is the
+  # exact table plot_equate() draws from (same fit/reference/shift), so
+  # reusing it guarantees identical rows.
+  register_hover_tip("eq_plot", function() eq_res()$table,
+    "location_2", "location_1", function(np)
+    sprintf("%s · reference %.3f · current %.3f",
+            np$item[1], np$location_2[1], np$location_1[1]))
   output$dl_anchors <- downloadHandler(
     filename = function() format(Sys.time(), "rasch_anchors_%Y%m%d_%H%M.csv"),
     content = function(file) {
@@ -4831,6 +4989,10 @@ server <- function(input, output, session) {
   register_plot("rcor_q3s", function() plot_resid_cor(fit(), stat = "q3star"),
                 w = 8, h = 7, px = cormat_px,
                 code = function() 'plot_resid_cor(fit, stat = "q3star")')
+  # hover identification: q3_mat()/q3s_mat() are the same matrices
+  # plot_resid_cor() colours (R/plots.R), so the cell lookup is exact.
+  register_hover_cormat("rcor_q3", q3_mat, "Q3")
+  register_hover_cormat("rcor_q3s", q3s_mat, "Q3*")
   # the flag threshold (shared by both matrices' red highlighting); defaults to
   # the conventional Q3* > 0.2 (Christensen, Makransky & Horton 2017)
   ld_flag <- reactive({
@@ -4957,6 +5119,17 @@ server <- function(input, output, session) {
     plot_equate(r$tailored, r$origin_equated, shift = "none")
   }, code = function()
     'plot_equate(ta$tailored, ta$origin_equated, shift = "none")')
+  # hover identification: same equate_tests() table plot_equate() computes
+  # internally from ta$tailored vs ta$origin_equated (shift = "none"); only
+  # drifting items are text-labelled on the plot.
+  guess_eq_res <- reactive({
+    r <- guess_res(); req(!is.null(r))
+    equate_tests(r$tailored, r$origin_equated, shift = "none")
+  })
+  register_hover_tip("guess_plot", function() guess_eq_res()$table,
+    "location_2", "location_1", function(np)
+    sprintf("%s · reference %.3f · current %.3f",
+            np$item[1], np$location_2[1], np$location_1[1]))
 
   # ---------------------------------------------------------------- compare --
   # kept fits hold either family (Rasch or paired-comparison/BTL); "keep
