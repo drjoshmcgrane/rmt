@@ -369,7 +369,8 @@ pcml <- function(X, model = c("PCM", "RSM"), anchors = NULL,
     return(list(model = model, thr = thr, cov_tau = sol$cov_tau,
                 loglik = sol$loglik, iterations = sol$iterations,
                 converged = sol$converged, m = m, anchors = anchors,
-                n_parameters = ncol(B), notes = weak$notes))
+                n_parameters = ncol(B), B = B, cov_beta = sol$cov_beta,
+                H_beta = sol$H_beta, notes = weak$notes))
   }
 
   if (model == "RSM") {
@@ -577,5 +578,6 @@ pcml_pc <- function(X, n_components = 4, maxit = 60, tol = 1e-8) {
   list(model = "PCM", n_components = n_components, thr = thr,
        components = comp, cov_tau = sol$cov_tau, loglik = sol$loglik,
        iterations = sol$iterations, converged = sol$converged, m = m,
-       anchors = NULL, n_parameters = ncol(B))
+       anchors = NULL, n_parameters = ncol(B), B = B,
+       cov_beta = sol$cov_beta, H_beta = sol$H_beta)
 }

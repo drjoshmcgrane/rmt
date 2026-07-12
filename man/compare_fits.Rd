@@ -8,29 +8,57 @@ compare_fits(..., reference = 1)
 }
 \arguments{
 \item{...}{Two or more fitted objects, ideally named
-(\code{compare_fits(PCM = f1, RSM = f2)}).}
+(\code{compare_fits(PCM = f1, RSM = f2)}). Either all Rasch-family
+fits or all \code{btl} fits; for \code{btl}, fits of the same
+comparison data (same objects, comparisons, and judges) support the
+likelihood columns -- e.g. free versus principal-component thresholds,
+with and without a position effect or within-judge dependence.}
 
 \item{reference}{Index or name of the reference fit for the
 log-likelihood difference; defaults to the first.}
 }
 \value{
-A data frame with one row per fit: label, model, persons, items,
-  parameters, log-likelihood, comparability with the reference,
+A data frame with one row per fit: label, model, persons, items
+  (judges, objects, comparisons for \code{btl}),
+  parameters, log-likelihood, \code{eff_params}, \code{cl_aic},
+  \code{cl_bic}, comparability with the reference,
   \code{two_delta_ll} and \code{delta_parameters} (same-data fits only),
-  chi-square per df, fit residual SDs, PSI, and alpha.
+  chi-square per df, fit residual SDs, PSI, and alpha (OSI for
+  \code{btl}).
 }
 \description{
 Builds a comparison table for two or more fits from \code{\link{rasch}},
-\code{\link{rasch_mfrm}}, or \code{\link{rasch_efrm}}. For fits of the
+\code{\link{rasch_mfrm}}, \code{\link{rasch_efrm}}, or (all together)
+\code{\link{btl}}. For fits of the
 same response data (identical item columns, maximum scores, and number of
 persons) the pairwise conditional log-likelihoods share their conditional
 information, and twice the difference from the reference fit is reported
 with the difference in parameter counts; this is descriptive (composite
 likelihood), and most meaningful for nested structures such as RSM inside
-PCM. Across different data preparations (subtests, splits, facet or frame
+PCM.
+}
+\details{
+The calibrated comparison is carried by the composite-likelihood
+information criteria \code{cl_aic} (Varin and Vidoni 2005) and
+\code{cl_bic} (Gao and Song 2010): \eqn{-2\,cl + c \cdot tr(H^{-1}J)},
+with \eqn{c = 2} or \eqn{\log n}. Because every response enters every
+pair its item forms, the pairwise log-likelihood over-counts the data;
+the effective parameter count \eqn{tr(H^{-1}J)} from the Godambe
+matrices -- the same quantity whose eigenvalues calibrate
+\code{\link{lr_test}} -- absorbs exactly that over-counting, where the
+nominal parameter count would not. \eqn{n} counts independent units:
+persons contributing at least one informative pair, or judges for
+paired-comparison fits (count-weighted comparisons when unclustered).
+Smaller is better; the criteria are valid across models of the same data
+whether or not they nest, and are \code{NA} (with the reason in the
+printed note) for MFRM and EFRM fits, which do not carry their Godambe
+matrices.
+
+Across different data preparations (subtests, splits, facet or frame
 structures) the likelihoods are not comparable and the calibration-free
 columns carry the comparison: total item-trait chi-square per degree of
-freedom, item and person fit residual SDs (ideal 1), PSI, and alpha.
+freedom, item and person fit residual SDs (ideal 1), PSI, and alpha
+(OSI for paired comparisons).
 }
 \examples{
 set.seed(1)

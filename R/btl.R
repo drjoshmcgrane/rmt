@@ -163,7 +163,10 @@
 #'   standardised residual, chi-square component), \code{judges} (when
 #'   given: per judge n, infit, outfit, fit residual, df), \code{total_chisq},
 #'   \code{total_df}, \code{total_p}, the object separation index
-#'   \code{osi}, \code{loglik}, convergence details, and \code{notes}.
+#'   \code{osi}, \code{loglik}, \code{cl} (the composite-likelihood
+#'   information ingredients used by \code{\link{compare_fits}}: the Godambe
+#'   effective parameter count and the independent-unit count),
+#'   convergence details, and \code{notes}.
 #'   Graded fits add \code{thresholds} (the symmetric threshold estimates
 #'   with standard errors), \code{m}, and \code{categories}. With an
 #'   \code{order} column the within-judge \code{dependence} effects table
@@ -764,6 +767,14 @@ plot_btl <- function(fit, band = 2.5) {
   H <- gh$H
   Hi <- solve(H)
   covth <- Hi %*% crossprod(Gm) %*% Hi
+  # composite-likelihood information ingredients: tr(H^-1 J) = tr(covth H)
+  # is the effective parameter count of the Godambe penalty (Varin & Vidoni
+  # 2005); abs() makes it sign-convention free (the eigenvalues of H^-1 J
+  # share one sign). Independent units are judges when clustered, else the
+  # count-weighted comparisons.
+  cl_info <- list(eff_params = abs(sum(diag(covth %*% H))),
+                  n_units = if (is.null(jd)) sum(w) else length(ucl),
+                  n_parameters = np)
   # anchored objects have a zero row in Bmat, so their location variance is
   # structurally zero (se == 0): the location is a fixed constant, not an estimate
   cov_beta <- Bmat %*% covth[1:nb, 1:nb, drop = FALSE] %*% t(Bmat)
@@ -910,7 +921,7 @@ plot_btl <- function(fit, band = 2.5) {
               total_p = pchisq(total_chisq, total_df, lower.tail = FALSE),
               osi = osi, loglik = loglik, iterations = it,
               converged = converged, n_comparisons = n_rows,
-              clustered = !is.null(jd), cov_beta = cov_beta,
+              clustered = !is.null(jd), cov_beta = cov_beta, cl = cl_info,
               comparisons = {
                 cmp <- data.frame(object_a = a, object_b = b,
                                   response = x, weight = w,

@@ -114,7 +114,10 @@ A list of class \code{"rasch_btl"}: \code{objects} (location, se,
   standardised residual, chi-square component), \code{judges} (when
   given: per judge n, infit, outfit, fit residual, df), \code{total_chisq},
   \code{total_df}, \code{total_p}, the object separation index
-  \code{osi}, \code{loglik}, convergence details, and \code{notes}.
+  \code{osi}, \code{loglik}, \code{cl} (the composite-likelihood
+  information ingredients used by \code{\link{compare_fits}}: the Godambe
+  effective parameter count and the independent-unit count),
+  convergence details, and \code{notes}.
   Graded fits add \code{thresholds} (the symmetric threshold estimates
   with standard errors), \code{m}, and \code{categories}. With an
   \code{order} column the within-judge \code{dependence} effects table

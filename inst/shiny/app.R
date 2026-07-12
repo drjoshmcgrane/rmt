@@ -301,7 +301,8 @@ css <- HTML("
   .navbar-brand { font-weight: 700; letter-spacing: .02em; }
   /* two-line wordmark: the package name over the spelled-out tagline */
   .app-brand { display: inline-flex; flex-direction: column;
-               justify-content: center; line-height: 1.06; }
+               justify-content: center; align-items: center;
+               text-align: center; line-height: 1.06; }
   .app-brand-name { font-weight: 700; font-size: 1.05rem; letter-spacing: .02em; }
   .app-brand-sub { font-weight: 400; font-size: .70rem; opacity: .6;
                    letter-spacing: .03em; }
@@ -1468,7 +1469,7 @@ panel_compare <- nav_panel("Compare", value = "p_compare", icon = bs_icon("colum
         selectizeInput("cmp_ref", "Reference fit", NULL,
                        options = list(placeholder = "keep at least two fits")),
         p(class = "text-muted small mt-3",
-          "Run an analysis, keep it, change the model or settings, run again, and keep that too. For fits of the same data the pairwise conditional log-likelihoods are compared directly (descriptive, composite likelihood; most meaningful for nested structures such as RSM inside PCM). Across different data preparations, compare the calibration-free columns: chi-square per df, fit residual SDs (ideal 1), PSI, and alpha.")),
+          "Run an analysis, keep it, change the model or settings, run again, and keep that too. cl_aic and cl_bic are composite-likelihood information criteria: their penalty, the Godambe effective parameter count, absorbs the pairwise over-counting that the nominal parameter count would not, so they are the calibrated way to choose between models of the same data — smaller is better. The raw log-likelihood difference (two_delta_ll) stays descriptive. Across different data preparations, compare the calibration-free columns instead: chi-square per df, the fit residual SDs (ideal 1), PSI/alpha, or OSI. Paired-comparison (BTL) fits can be kept and compared too — for example free versus principal-component thresholds, or with and without a position effect or within-judge dependence.")),
       card(
         full_screen = TRUE,
         card_header_bar("Model comparison",
@@ -1484,6 +1485,7 @@ panel_compare <- nav_panel("Compare", value = "p_compare", icon = bs_icon("colum
           conditionalPanel("output.has_cmp == true",
             p(class = "text-muted small mb-2",
               "Reference for the log-likelihood comparison is the fit chosen in the sidebar."),
+            uiOutput("cmp_family_note"),
             DTOutput("cmp_tbl"), rcode_details("cmp_tbl")),
           padding = 12, fillable = FALSE))
     )
@@ -1654,7 +1656,7 @@ ui <- page_navbar(
   id = "nav",
   title = span(class = "app-brand",
                span("rasch", class = "app-brand-name"),
-               span("Rasch Measurement Theory", class = "app-brand-sub")),
+               span("measurement theory", class = "app-brand-sub")),
   theme = theme,
   # normal scrolling pages: never compress content to fit the viewport
   fillable = FALSE,
@@ -2551,10 +2553,11 @@ server <- function(input, output, session) {
     # paired-comparison fit with judge factors nominated
     show("p_dif", (rasch_on && !is.null(f$factors) &&
                      length(names(f$factors)) > 0) || btl_dif_on)
-    # Compare applies to Rasch fits only; for a paired-comparison fit the
-    # More menu offers Export alone (its BTL empty state points to the
-    # per-card CSV downloads)
-    show("p_compare", rasch_on)
+    # Compare applies to either family: Rasch fits and paired-comparison
+    # (BTL) fits can each be kept and compared among themselves (their
+    # likelihoods are over different data, so the table groups kept fits by
+    # family around whichever one is chosen as the reference)
+    show("p_compare", rasch_on || btl_on)
     # menu headers hide too when everything inside them is hidden
     show("menu_independence", rasch_on || btl_on)
     show("menu_invariance", rasch_on || btl_dif_on)
@@ -2820,8 +2823,10 @@ server <- function(input, output, session) {
     contrast = c("item", "contrast", "estimate", "se", "statistic", "p_adj"),
     frames = c("set", "group", "rho", "se_log_rho", "origin", "fit_resid",
                "n_responses"),
-    compare = c("label", "model", "persons", "items", "two_delta_ll",
-                "chisq_per_df", "item_fit_sd", "person_fit_sd", "PSI", "alpha"),
+    compare = c("label", "model", "persons", "items", "judges", "objects",
+                "eff_params", "cl_aic", "cl_bic", "two_delta_ll",
+                "chisq_per_df", "item_fit_sd", "person_fit_sd", "PSI",
+                "alpha", "OSI"),
     rescore = c("item", "option", "keyed", "n", "prop", "mean_location",
                 "z_sep", "proposed"))
   curate <- function(d, which, full = FALSE, extra = NULL) {
@@ -2855,7 +2860,8 @@ server <- function(input, output, session) {
     exp_mean = "Expected mean",
     exp_value = "Expected value", theta_mean = "Mean location",
     theta_max = "Max location", chisq_per_df = "Chi-sq/df",
-    two_delta_ll = "2Δ log-lik", se_log_phi = "SE (log φ)",
+    two_delta_ll = "2Δ log-lik", eff_params = "Eff. params",
+    cl_aic = "CL-AIC", cl_bic = "CL-BIC", se_log_phi = "SE (log φ)",
     se_log_alpha = "SE (log α)", se_log_rho = "SE (log ρ)",
     mu = "Origin", comparisons = "Comparisons",
     obs_p = "Observed", est_p = "Expected", obs_t = "Threshold prop.",
@@ -2887,7 +2893,7 @@ server <- function(input, output, session) {
     dt
   }
   num_dt <- function(d, digits = 3, p_bold = NULL,
-                     page_len = 15, paging = NULL, ...) {
+                     page_len = 15, paging = NULL, one_dp = NULL, ...) {
     orig <- names(d)
     # unname: which() on named logicals yields named position vectors, and
     # jsonlite warns whenever one reaches the widget payload
@@ -2920,7 +2926,14 @@ server <- function(input, output, session) {
                     class = "table-sm compact hover order-column", ...,
                     options = opts)
     rnd <- which(num & !intcol & !pcol)
-    if (length(rnd)) dt <- formatRound(dt, rnd, digits)
+    # a named subset (e.g. the composite-likelihood ICs) can round to one
+    # decimal place instead of the table's default; each column is targeted
+    # by exactly one formatRound() call, so the two never compete
+    one <- orig %in% one_dp
+    rnd1 <- intersect(rnd, which(one))
+    rnd3 <- setdiff(rnd, rnd1)
+    if (length(rnd3)) dt <- formatRound(dt, rnd3, digits)
+    if (length(rnd1)) dt <- formatRound(dt, rnd1, 1)
     dt <- flag_fit_cols(dt, orig)
     for (pc in which(orig %in% p_bold))
       dt <- formatStyle(dt, pc,
@@ -4887,21 +4900,32 @@ server <- function(input, output, session) {
     'plot_equate(ta$tailored, ta$origin_equated, shift = "none")')
 
   # ---------------------------------------------------------------- compare --
+  # kept fits hold either family (Rasch or paired-comparison/BTL); "keep
+  # current fit" keeps whichever is active (btl_fit() when a BTL analysis is
+  # current, the Rasch fit() otherwise -- the two are mutually exclusive, see
+  # the run observer above)
   kept_fits <- reactiveVal(list())
   observeEvent(input$keep_fit, {
-    f <- fit()
+    bf <- btl_fit()
+    f <- if (!is.null(bf)) bf else fit()
     k <- kept_fits()
-    lab <- sprintf("%d_%s", length(k) + 1L, f$model)
+    lab <- sprintf("%d_%s", length(k) + 1L,
+                   if (inherits(f, "rasch_btl"))
+                     paste0("BTL_", f$thr_structure) else f$model)
     k[[lab]] <- f
     kept_fits(k)
     updateSelectizeInput(session, "cmp_ref", choices = names(k),
                          selected = if (!is.null(input$cmp_ref) &&
                                         input$cmp_ref %in% names(k))
                            input$cmp_ref else names(k)[1])
-    updateSelectizeInput(session, "eq_kept", choices = names(k),
+    # the Equating "kept fit" reference is the Rasch common-item route only
+    # (paired-comparison equating uses its own banked-CSV path on the
+    # Equating page); offer only the Rasch-family kept fits there
+    rasch_k <- names(k)[!vapply(k, inherits, TRUE, what = "rasch_btl")]
+    updateSelectizeInput(session, "eq_kept", choices = rasch_k,
                          selected = if (!is.null(input$eq_kept) &&
-                                        input$eq_kept %in% names(k))
-                           input$eq_kept else names(k)[length(k)])
+                                        input$eq_kept %in% rasch_k)
+                           input$eq_kept else rasch_k[length(rasch_k)])
     showNotification(sprintf("Kept '%s' (%d fit(s) held).", lab, length(k)),
                      type = "message", duration = 5)
   })
@@ -4913,19 +4937,40 @@ server <- function(input, output, session) {
                          selected = character(0))
     showNotification("Cleared kept fits.", type = "message", duration = 4)
   })
-  cmp_res <- reactive({
+  # compare_fits() refuses a mixture of Rasch and BTL fits ("not a
+  # mixture": their likelihoods are over different data), so the kept fits
+  # are grouped by family around whichever one the reference belongs to;
+  # kept fits of the other family are set aside (n_other) rather than shown
+  cmp_group <- reactive({
     k <- kept_fits()
-    validate(need(length(k) >= 2,
-                  "Keep at least two fits (run, keep, change settings, run, keep) to compare."))
+    if (!length(k)) return(list(kk = k, ref = 1, n_other = 0L))
     ref <- if (!is.null(input$cmp_ref) && input$cmp_ref %in% names(k))
       input$cmp_ref else 1
-    as.data.frame(do.call(compare_fits, c(k, list(reference = ref))))
+    is_btl <- vapply(k, inherits, TRUE, what = "rasch_btl")
+    ref_is_btl <- unname(is_btl[[ref]])
+    list(kk = k[is_btl == ref_is_btl], ref = ref,
+         n_other = sum(is_btl != ref_is_btl))
   })
+  cmp_res <- reactive({
+    g <- cmp_group()
+    validate(need(length(g$kk) >= 2,
+                  "Keep at least two fits of the same family (Rasch or paired-comparison) as the reference to compare."))
+    as.data.frame(do.call(compare_fits, c(g$kk, list(reference = g$ref))))
+  })
+  output$cmp_family_note <- renderUI({
+    g <- cmp_group()
+    if (g$n_other == 0L) return(NULL)
+    p(class = "text-muted small mb-2",
+      sprintf("%d kept fit(s) of the other family are not shown (likelihoods are over different data).",
+              g$n_other))
+  })
+  outputOptions(output, "cmp_family_note", suspendWhenHidden = FALSE)
   register_table("cmp_tbl", function() cmp_res(), function() {
     d <- cmp_res()
     if ("same_data" %in% names(d))
       d$same_data <- ifelse(d$same_data, "yes", "no")
-    num_dt(curate(d, "compare", full = isTRUE(input$cmp_full)))
+    num_dt(curate(d, "compare", full = isTRUE(input$cmp_full)),
+          one_dp = c("eff_params", "cl_aic", "cl_bic"))
   }, code = function()
     "compare_fits(fit_a = f1, fit_b = f2, reference = 1)  # keep fits, then compare")
 
