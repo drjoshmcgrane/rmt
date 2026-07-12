@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.9.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,13 @@
       <small>Source: <a href="https://github.com/drjoshmcgrane/rasch/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.10.0" id="rasch-1100">rasch 1.10.0<a class="anchor" aria-label="anchor" href="#rasch-1100"></a></h2>
+<ul><li>Model comparison, calibrated for composite likelihood. <code><a href="../reference/compare_fits.html">compare_fits()</a></code> gains <code>cl_aic</code> and <code>cl_bic</code> (Varin &amp; Vidoni 2005; Gao &amp; Song 2010): <code>-2 cl</code> penalised by the effective parameter count <code>tr(H^-1 J)</code> from the Godambe matrices – the same quantity whose eigenvalues calibrate <code><a href="../reference/lr_test.html">lr_test()</a></code> – which absorbs the pairwise over-counting a nominal AIC/BIC would ignore (empirically 3.5-5x the nominal count). Verified by plant-and-detect: the criteria select RSM on rating-structured data, PCM under varying threshold spreads, and a planted BTL position effect – and reject the richer model when the effect is absent. <code>n</code> for CL-BIC counts independent units: persons contributing an informative pair, or judges (count-weighted comparisons when unclustered). MFRM/EFRM fits report NA with the reason noted.</li>
+<li>
+<code><a href="../reference/compare_fits.html">compare_fits()</a></code> now accepts <code>btl</code> fits (all-BTL comparisons: free vs principal-component thresholds, with/without a position effect or within-judge dependence), reporting judges/objects/comparisons and OSI. <code><a href="../reference/btl.html">btl()</a></code> fits carry their composite-likelihood ingredients in <code>$cl</code>; anchored <code><a href="../reference/pcml.html">pcml()</a></code> and <code><a href="../reference/pcml_pc.html">pcml_pc()</a></code> now return their Godambe matrices. The app’s Compare page shows the criteria and accepts paired-comparison fits.</li>
+<li>Cross-validation against independent implementations, in the test suite whenever the packages are installed (new in Suggests: eRm, sirt, psychotools): dichotomous, PCM, and RSM parameters against eRm’s full CML (agreement to sampling precision; pairwise SEs at or just above CML’s, the documented efficiency price), the same pairwise family against sirt::rasch.pairwise (near-identity), and btl() against psychotools::btmodel to machine precision (same likelihood).</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.9.3" id="rasch-193">rasch 1.9.3<a class="anchor" aria-label="anchor" href="#rasch-193"></a></h2>
 <ul><li>Missing-data identification, verified and enforced. A booklet-design probe (zero complete cases, linked forms, MCAR on top) confirmed the pairwise conditional estimator recovers planted parameters with nominal coverage – and exposed two silent failure modes at the design’s edges, both now honest:</li>

@@ -1,5 +1,40 @@
 # Changelog
 
+## rasch 1.10.0
+
+- Model comparison, calibrated for composite likelihood.
+  [`compare_fits()`](https://drjoshmcgrane.github.io/rasch/reference/compare_fits.md)
+  gains `cl_aic` and `cl_bic` (Varin & Vidoni 2005; Gao & Song 2010):
+  `-2 cl` penalised by the effective parameter count `tr(H^-1 J)` from
+  the Godambe matrices – the same quantity whose eigenvalues calibrate
+  [`lr_test()`](https://drjoshmcgrane.github.io/rasch/reference/lr_test.md)
+  – which absorbs the pairwise over-counting a nominal AIC/BIC would
+  ignore (empirically 3.5-5x the nominal count). Verified by
+  plant-and-detect: the criteria select RSM on rating-structured data,
+  PCM under varying threshold spreads, and a planted BTL position effect
+  – and reject the richer model when the effect is absent. `n` for
+  CL-BIC counts independent units: persons contributing an informative
+  pair, or judges (count-weighted comparisons when unclustered).
+  MFRM/EFRM fits report NA with the reason noted.
+- [`compare_fits()`](https://drjoshmcgrane.github.io/rasch/reference/compare_fits.md)
+  now accepts `btl` fits (all-BTL comparisons: free vs
+  principal-component thresholds, with/without a position effect or
+  within-judge dependence), reporting judges/objects/comparisons and
+  OSI. [`btl()`](https://drjoshmcgrane.github.io/rasch/reference/btl.md)
+  fits carry their composite-likelihood ingredients in `$cl`; anchored
+  [`pcml()`](https://drjoshmcgrane.github.io/rasch/reference/pcml.md)
+  and
+  [`pcml_pc()`](https://drjoshmcgrane.github.io/rasch/reference/pcml_pc.md)
+  now return their Godambe matrices. The app’s Compare page shows the
+  criteria and accepts paired-comparison fits.
+- Cross-validation against independent implementations, in the test
+  suite whenever the packages are installed (new in Suggests: eRm, sirt,
+  psychotools): dichotomous, PCM, and RSM parameters against eRm’s full
+  CML (agreement to sampling precision; pairwise SEs at or just above
+  CML’s, the documented efficiency price), the same pairwise family
+  against sirt::rasch.pairwise (near-identity), and btl() against
+  psychotools::btmodel to machine precision (same likelihood).
+
 ## rasch 1.9.3
 
 - Missing-data identification, verified and enforced. A booklet-design

@@ -31,7 +31,7 @@ graph must remain connected."><meta property="og:image" content="https://drjoshm
 
     <a class="navbar-brand me-2" href="../index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.9.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -222,7 +222,10 @@ response. Both modes report the component decomposition.</p></dd>
   standardised residual, chi-square component), <code>judges</code> (when
   given: per judge n, infit, outfit, fit residual, df), <code>total_chisq</code>,
   <code>total_df</code>, <code>total_p</code>, the object separation index
-  <code>osi</code>, <code>loglik</code>, convergence details, and <code>notes</code>.
+  <code>osi</code>, <code>loglik</code>, <code>cl</code> (the composite-likelihood
+  information ingredients used by <code><a href="compare_fits.html">compare_fits</a></code>: the Godambe
+  effective parameter count and the independent-unit count),
+  convergence details, and <code>notes</code>.
   Graded fits add <code>thresholds</code> (the symmetric threshold estimates
   with standard errors), <code>m</code>, and <code>categories</code>. With an
   <code>order</code> column the within-judge <code>dependence</code> effects table

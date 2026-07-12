@@ -32,7 +32,7 @@
 
     <a class="navbar-brand me-2" href="index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.9.3</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.10.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -269,7 +269,8 @@
 <div class="section level2">
 <h2 id="validation">Validation<a class="anchor" aria-label="anchor" href="#validation"></a>
 </h2>
-<p>Every estimation and diagnostic component is validated against simulated data with known parameters in <code>tests/testthat</code> (750+ tests): parameter recovery for every model; sandwich standard errors against empirical sampling variability; DIF detected on planted items only — including within-subject, factorial, and judge-group designs — with adversarial cases for artificial DIF; dimensionality verdicts on one- and two-dimensional data with a calibrated null; dependence effects recovered from sequentially simulated judgments; and the published conventions reproduced directly against the worked examples they come from. <code>R CMD check</code> runs clean.</p>
+<p>Every estimation and diagnostic component is validated against simulated data with known parameters in <code>tests/testthat</code> (990+ tests): parameter recovery for every model; sandwich standard errors against empirical sampling variability; DIF detected on planted items only — including within-subject, factorial, and judge-group designs — with adversarial cases for artificial DIF; dimensionality verdicts on one- and two-dimensional data with a calibrated null; dependence effects recovered from sequentially simulated judgments; and the published conventions reproduced directly against the worked examples they come from. <code>R CMD check</code> runs clean.</p>
+<p>The estimators are also cross-validated against independent implementations, at the level of agreement each comparison licenses: <code><a href="https://rdrr.io/pkg/sirt/man/rasch.pairwise.html" class="external-link">sirt::rasch.pairwise</a></code> estimates the same pairwise conditional family and agrees to near-identity; <code>eRm</code> fits the full Andersen conditional likelihood — a different consistent estimator of the same parameters — and agrees to sampling precision, with our judge-robust sandwich standard errors sitting just above eRm’s CML errors (the documented efficiency price of pairwise conditioning); and <code><a href="reference/btl.html">btl()</a></code> reproduces <code><a href="https://rdrr.io/pkg/psychotools/man/btmodel.html" class="external-link">psychotools::btmodel</a></code> to machine precision, as it must (same likelihood). These checks run in the test suite whenever the packages are installed.</p>
 </div>
 <div class="section level2">
 <h2 id="methodological-references">Methodological references<a class="anchor" aria-label="anchor" href="#methodological-references"></a>

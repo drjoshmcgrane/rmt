@@ -339,7 +339,7 @@ questions such a design cannot support.
 ## Validation
 
 Every estimation and diagnostic component is validated against simulated
-data with known parameters in `tests/testthat` (750+ tests): parameter
+data with known parameters in `tests/testthat` (990+ tests): parameter
 recovery for every model; sandwich standard errors against empirical
 sampling variability; DIF detected on planted items only — including
 within-subject, factorial, and judge-group designs — with adversarial
@@ -348,6 +348,21 @@ two-dimensional data with a calibrated null; dependence effects
 recovered from sequentially simulated judgments; and the published
 conventions reproduced directly against the worked examples they come
 from. `R CMD check` runs clean.
+
+The estimators are also cross-validated against independent
+implementations, at the level of agreement each comparison licenses:
+[`sirt::rasch.pairwise`](https://rdrr.io/pkg/sirt/man/rasch.pairwise.html)
+estimates the same pairwise conditional family and agrees to
+near-identity; `eRm` fits the full Andersen conditional likelihood — a
+different consistent estimator of the same parameters — and agrees to
+sampling precision, with our judge-robust sandwich standard errors
+sitting just above eRm’s CML errors (the documented efficiency price of
+pairwise conditioning); and
+[`btl()`](https://drjoshmcgrane.github.io/rasch/reference/btl.md)
+reproduces
+[`psychotools::btmodel`](https://rdrr.io/pkg/psychotools/man/btmodel.html)
+to machine precision, as it must (same likelihood). These checks run in
+the test suite whenever the packages are installed.
 
 ## Methodological references
 
