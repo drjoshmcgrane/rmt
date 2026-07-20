@@ -1,5 +1,24 @@
 # Changelog
 
+## rasch 1.11.2
+
+Edge cases from the fourth review round, verified and closed:
+
+- The BTL dimensionality reference now simulates at the PAIR level:
+  count weights are summed per unordered pair and rounded, so half-tie
+  rows (weight 0.5 in each direction) recombine into whole comparisons.
+  Row-level simulation broke on fractional weights (`as.integer(0.5)` is
+  a zero binomial size – every reference draw degenerated to 0). The
+  per-replicate leading strengths are exposed as `$reference$draws`.
+- `btl_efrm(se_method = "judge_bootstrap")` refuses a panel with a
+  single judge (resampling one judge returns the same data every time,
+  so its SEs would be a spurious zero) and notes panels with fewer than
+  five judges as rough.
+- [`btl()`](https://drjoshmcgrane.github.io/rasch/reference/btl.md)
+  notes when there are no more judge clusters than parameters: the
+  clustered covariance is then rank-deficient by construction and no
+  scalar (CR1) correction repairs it – the SEs likely understate.
+
 ## rasch 1.11.1
 
 The follow-up review’s residual findings, all verified and closed:

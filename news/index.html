@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.11.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.11.2</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,15 @@
       <small>Source: <a href="https://github.com/drjoshmcgrane/rasch/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.11.2" id="rasch-1112">rasch 1.11.2<a class="anchor" aria-label="anchor" href="#rasch-1112"></a></h2>
+<p>Edge cases from the fourth review round, verified and closed:</p>
+<ul><li>The BTL dimensionality reference now simulates at the PAIR level: count weights are summed per unordered pair and rounded, so half-tie rows (weight 0.5 in each direction) recombine into whole comparisons. Row-level simulation broke on fractional weights (<code>as.integer(0.5)</code> is a zero binomial size – every reference draw degenerated to 0). The per-replicate leading strengths are exposed as <code>$reference$draws</code>.</li>
+<li>
+<code>btl_efrm(se_method = "judge_bootstrap")</code> refuses a panel with a single judge (resampling one judge returns the same data every time, so its SEs would be a spurious zero) and notes panels with fewer than five judges as rough.</li>
+<li>
+<code><a href="../reference/btl.html">btl()</a></code> notes when there are no more judge clusters than parameters: the clustered covariance is then rank-deficient by construction and no scalar (CR1) correction repairs it – the SEs likely understate.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.11.1" id="rasch-1111">rasch 1.11.1<a class="anchor" aria-label="anchor" href="#rasch-1111"></a></h2>
 <p>The follow-up review’s residual findings, all verified and closed:</p>

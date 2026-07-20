@@ -73,5 +73,5 @@ d <- data.frame(a = rep(pr[, 1], each = 30), b = rep(pr[, 2], each = 30))
 d$win <- ifelse(runif(nrow(d)) < plogis(beta[d$a] - beta[d$b]), d$a, d$b)
 btl_dimensionality(btl(d, "a", "b", "win"), reps = 20)
 #> Paired-comparison residual dimensionality: 3 bimension(s)
-#> Leading bimension strength 1.370 (91% of residual; reference 95%: 2.329) -> within noise (one scale suffices)
+#> Leading bimension strength 1.370 (91% of residual; reference 95%: 2.440) -> within noise (one scale suffices)
 ```
