@@ -97,7 +97,7 @@ test_that("every public estimator rejects fractional scores", {
                "non-integer")
   d <- data.frame(a = rep("X", 30), b = rep("Y", 30),
                   resp = rep(c(0, 1, 1.5), 10))
-  expect_error(btl(d, "a", "b", response = "resp"), "integers 0..m")
+  expect_error(btl(d, "a", "b", response = "resp"), "non-integer")
 })
 
 test_that("item_moments is overflow-stable and person_wle survives wide items", {
@@ -184,8 +184,9 @@ test_that("clustered dependence tests use a t reference with G - 1 df", {
            position = TRUE)
   dp <- f$dependence
   expect_equal(unique(dp$df), 5L)
-  expect_equal(dp$p, 2 * pt(-abs(dp$z), df = 5), tolerance = 1e-12)
-  expect_true(all(dp$p >= 2 * pnorm(-abs(dp$z))))   # wider than normal theory
+  expect_true("t" %in% names(dp))                   # labelled for its reference
+  expect_equal(dp$p, 2 * pt(-abs(dp$t), df = 5), tolerance = 1e-12)
+  expect_true(all(dp$p >= 2 * pnorm(-abs(dp$t))))   # wider than normal theory
 })
 
 test_that("simulate_rasch validates the second-dimension specification", {
@@ -193,4 +194,36 @@ test_that("simulate_rasch validates the second-dimension specification", {
                "correlation in")
   expect_error(simulate_rasch(50, 6, second_dim = list(items = "I99", rho = .5)),
                "unknown item")
+})
+
+test_that("margin ordering must be explicit (ordered factor or numeric)", {
+  d <- data.frame(a = rep(c("X", "Y", "Z"), 40), b = rep(c("Y", "Z", "X"), 40))
+  set.seed(1)
+  d$win <- ifelse(runif(120) < .5, d$a, d$b)
+  mg <- sample(c("small", "large"), 120, TRUE)
+  d$m_plain <- factor(mg); d$m_chr <- mg
+  d$m_ord <- factor(mg, levels = c("small", "large"), ordered = TRUE)
+  expect_error(btl(d, "a", "b", winner = "win", margin = "m_plain"), "ORDERED")
+  expect_error(btl(d, "a", "b", winner = "win", margin = "m_chr"), "character")
+  expect_s3_class(btl(d, "a", "b", winner = "win", margin = "m_ord"),
+                  "rasch_btl")
+})
+
+test_that("invalid graded numeric responses error instead of being dropped", {
+  d <- data.frame(a = rep(c("X", "Y", "Z"), 40), b = rep(c("Y", "Z", "X"), 40))
+  d$r_chr <- rep(c("0", "1", "abc"), 40)
+  d$r_inf <- rep(c(0, 1, Inf), 40)
+  expect_error(btl(d, "a", "b", response = "r_chr"), "non-numeric")
+  expect_error(btl(d, "a", "b", response = "r_inf"), "non-finite")
+})
+
+test_that("simulator rejects malformed second-dimension specifications", {
+  expect_error(simulate_rasch(50, 6, second_dim = list(items = 4.9, rho = .5)),
+               "whole numbers")
+  expect_error(simulate_rasch(50, 6, second_dim = list(items = integer(0),
+                                                       rho = .5)),
+               "at least one item")
+  expect_error(simulate_rasch(50, 6, second_dim = list(items = 4:6,
+                                                       rho = c(.5, .6))),
+               "single correlation")
 })

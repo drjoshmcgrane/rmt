@@ -1,3 +1,22 @@
+# rasch 1.11.5
+
+Seventh review round: three completions of round-six fixes, one label.
+
+* `margin=` gets the same explicit-ordering rule as `response=`: an
+  ORDERED factor (smallest to largest margin) or a numeric magnitude;
+  plain factors AND character columns are refused, since alphabetical
+  order could silently reverse which margin counts as the big win.
+* Invalid graded numeric responses ("abc", Inf) error through the shared
+  guard instead of becoming missing and being dropped -- the fit no
+  longer succeeds on silently reduced data.
+* The simulator's item resolver rejects fractional indices (4.9 no
+  longer truncates to item 4), an empty `second_dim$items`, and a
+  vector-valued `rho`.
+* The clustered dependence/position statistic is labelled `t`, matching
+  its t(G - 1) reference (at infinite df it is the familiar z). The
+  reviewer's independent 400-run null simulation of the cluster-t
+  correction found 5.25% rejection at nominal 5%.
+
 # rasch 1.11.4
 
 Sixth review round: four findings, all verified and closed.

@@ -238,7 +238,7 @@ test_that("winner + margin entry and PC thresholds behave as designed", {
   # winner + margin is exactly the single-column coding, orientation-free
   d$winner <- ifelse(d$grade >= 2, d$a, d$b)
   d$margin <- factor(c("much", "a little", "a little", "much")[d$grade + 1],
-                     levels = c("a little", "much"))
+                     levels = c("a little", "much"), ordered = TRUE)
   f1 <- btl(d, "a", "b", response = "grade")
   f2 <- btl(d, "a", "b", winner = "winner", margin = "margin")
   expect_equal(f2$objects$location, f1$objects$location, tolerance = 1e-10)
@@ -868,7 +868,7 @@ test_that("position bias: a first-position advantage is recovered", {
   set.seed(202)
   f0 <- btl(sim_pos(0), "a", "b", winner = "win", position = TRUE)
   pos0 <- f0$dependence[f0$dependence$effect == "position", ]
-  expect_lt(abs(pos0$z), 2)
+  expect_lt(abs(pos0$t), 2)
 
   # identified through triangle closure even with a FIXED orientation (each
   # pair always presented in the same order); the separation guard leaves it in
@@ -880,7 +880,7 @@ test_that("position bias: a first-position advantage is recovered", {
   fp <- ff$dependence[ff$dependence$effect == "position", ]
   expect_false(any(grepl("separated", ff$notes)))
   expect_lt(abs(fp$estimate), 10)
-  expect_gt(fp$z, 2)
+  expect_gt(fp$t, 2)
   # the print label is the positional one, not "Within-judge"
   expect_output(print(ff), "First-position advantage")
 })
@@ -972,7 +972,7 @@ test_that("position and order covariates are estimated together", {
   # every row informs position; not every row informs exposure/carry-over
   pos <- f$dependence[f$dependence$effect == "position", ]
   expect_equal(pos$n_informative, f$n_comparisons)
-  expect_gt(pos$z, 2)   # the planted first-position advantage is detected
+  expect_gt(pos$t, 2)   # the planted first-position advantage is detected
 })
 
 test_that("count-weighted rows give the SAME standard errors as expanded rows", {

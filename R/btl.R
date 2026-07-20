@@ -255,11 +255,8 @@ btl <- function(data, object_a, object_b, winner = NULL, response = NULL,
              "can reverse -- the response scale")
       cats <- levels(xr); x <- as.integer(xr) - 1L
     } else {
-      xn <- as.numeric(xr)
-      if (any(!is.na(xn) & xn != round(xn)))
-        stop("graded responses must be integers 0..m (got e.g. ",
-             format(xn[!is.na(xn) & xn != round(xn)][1]),
-             "); rescore explicitly before analysis")
+      .check_integer_scores(xr, "the graded response")
+      xn <- suppressWarnings(as.numeric(as.character(xr)))
       x <- as.integer(xn)
       if (any(x < 0, na.rm = TRUE))
         stop("graded responses must be non-negative integers 0..m")
@@ -289,6 +286,19 @@ btl <- function(data, object_a, object_b, winner = NULL, response = NULL,
     # response is assembled from "who won" and "by how much"; a winner value
     # matching neither object is a tie and becomes the middle category.
     mg <- data[[margin]]
+    # the margin's level order defines the graded scale, so it must be
+    # explicit: an ordered factor (smallest to largest margin) or a numeric
+    # magnitude. A plain factor's -- or a character column's -- alphabetical
+    # order can silently reverse which margin counts as the big win.
+    if (is.factor(mg) && !is.ordered(mg))
+      stop("`margin` must be an ORDERED factor (factor(..., ordered = ",
+           "TRUE), levels smallest to largest margin) or a numeric ",
+           "magnitude: a plain factor's alphabetical level order would ",
+           "silently define -- and can reverse -- the margin scale")
+    if (is.character(mg))
+      stop("`margin` is a character column; supply an ORDERED factor ",
+           "(levels smallest to largest margin) or a numeric magnitude, ",
+           "so the margin order is explicit rather than alphabetical")
     lv <- if (is.factor(mg)) levels(droplevels(mg)) else
       as.character(sort(unique(mg[!is.na(mg)])))
     q <- length(lv)
@@ -425,7 +435,7 @@ print.rasch_btl <- function(x, ...) {
         paste("Within-judge", gsub("_", "-", x$dependence$effect[r]))
       cat(sprintf("%s: %.3f logits (SE %.3f, z = %.2f, p = %s)\n",
                   lab, x$dependence$estimate[r], x$dependence$se[r],
-                  x$dependence$z[r], .fmt_p(x$dependence$p[r])))
+                  x$dependence$t[r], .fmt_p(x$dependence$p[r])))
     }
   }
   if (!is.null(x$thresholds)) {
@@ -837,7 +847,7 @@ plot_btl <- function(fit, band = 2.5) {
     t_df <- if (!is.null(jd)) max(nc - 1L, 1L) else Inf
     dependence <- data.frame(
       effect = colnames(Z), estimate = dep, se = dse,
-      z = dep / dse, df = t_df,
+      t = dep / dse, df = t_df,
       p = 2 * pt(-abs(dep / dse), df = t_df),
       # count-weighted: the number of comparisons (not rows) that carry
       # information about each effect

@@ -56,7 +56,8 @@ test_that("an unmatched winner is missing, not a tie", {
   expect_true(any(grepl("15 tie\\(s\\) dropped", f$notes)))
   expect_equal(f$n_comparisons, nrow(d) - 35)
   # margin path: same semantics
-  d$margin <- ifelse(d$win %in% c(d$a, d$b), "much", NA)
+  d$margin <- factor(ifelse(d$win %in% c(d$a, d$b), "much", NA),
+                     levels = "much", ordered = TRUE)
   d$margin[21:35] <- NA
   fm <- btl(d, "a", "b", winner = "win", margin = "margin")
   expect_true(any(grepl("treated as missing", fm$notes)))
