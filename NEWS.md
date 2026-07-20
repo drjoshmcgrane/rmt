@@ -1,3 +1,39 @@
+# rasch 1.12.3
+
+Thirteenth review round: the BTL, EFRM, and MFRM analogues of the DIF
+and identification work. Development branch only; the CRAN submission
+of 1.11.7 is untouched.
+
+* `btl_dif()` runs on the same order-invariant machinery as the person
+  DIF ANOVA: between-judge terms by Type II sums of squares on
+  band-centred judge margins, band-crossing terms through orthonormal
+  contrasts with the Greenhouse-Geisser correction. Verified exactly
+  order-invariant across correlated judge factors; the tuned planted
+  detections are unchanged.
+* `btl_dif()` rejects factors that vary within a judge (the judge-level
+  analysis would silently take whichever row came first).
+* `btl_efrm()` validates within-set object-graph connectivity (relative
+  locations inside a disconnected set are unidentified, exactly as in
+  `pcml()`) and alpha identification (cross-set comparisons must touch
+  at least two objects of every non-reference set; one object
+  identifies only the origin).
+* `rasch_efrm()` group linkage requires at least two SHARED ITEMS of a
+  common set between groups: sharing a set label with disjoint item
+  subsets left the unit ratio unidentified but was accepted.
+* `dif_anova()` works on EFRM fits: the frame group is excluded (it is
+  the frame structure -- every frame has its own virtual items -- so it
+  has no within-item contrast) with a note, and other person factors
+  are tested per virtual item; nominating only the frame group is an
+  informative error.
+* `rasch_mfrm()` gains `factors=` (person factors, constant within
+  person, validated -- a facet passed as a person factor errors with a
+  pointer to `interaction=`), so `dif_anova()` works on MFRM fits
+  directly; unavailable DIF magnitudes are reported in `notes` instead
+  of silently returning nothing.
+* The frames table's `se_log_rho` independence approximation (log alpha
+  and log phi estimated in different stages; cross-stage covariance
+  unavailable) is stated in the documentation.
+
 # rasch 1.12.2
 
 Twelfth review round: the incomplete-panel edges of the DIF engine.

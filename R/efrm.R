@@ -573,14 +573,23 @@ rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
   pairs <- .efrm_filter_pairs(.pair_counts(Xv, m_v), vmap)
   if (!length(pairs)) stop("no informative within-frame item pairs")
 
-  # phi-link check: groups joined when a set has pairs in both groups' frames
-  frames_p <- unique(data.frame(set = vmap$set[vapply(pairs, `[[`, 1L, "i")],
-                                group = vmap$group[vapply(pairs, `[[`, 1L, "i")]))
+  # phi-link check: two groups are joined only when they SHARE at least two
+  # observed items of a common set. Sharing a set label alone is not enough:
+  # the unit ratio phi_g/phi_h is identified through the common structural
+  # thresholds of items both groups answered, and a spread comparison needs
+  # at least two of them (disjoint item subsets of the same set leave the
+  # ratio unidentified even though the old set-level check passed).
+  has_data <- colSums(!is.na(Xv)) > 0L
   edges_g <- list()
-  for (s in unique(frames_p$set)) {
-    gs <- match(frames_p$group[frames_p$set == s], glevs)
-    if (length(gs) > 1L) for (j in 2:length(gs))
-      edges_g[[length(edges_g) + 1L]] <- c(gs[1], gs[j])
+  for (s in unique(vmap$set)) {
+    by_grp <- lapply(glevs, function(g) {
+      sel <- vmap$set == s & vmap$group == g & has_data
+      unique(vmap$item[sel])
+    })
+    for (g1 in seq_along(glevs)) for (g2 in seq_len(g1 - 1L)) {
+      if (length(intersect(by_grp[[g1]], by_grp[[g2]])) >= 2L)
+        edges_g[[length(edges_g) + 1L]] <- c(g1, g2)
+    }
   }
   comp_g <- .efrm_components(G, edges_g)
   if (length(unique(comp_g)) > 1L)
@@ -712,6 +721,7 @@ rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
   if (!is.null(fac_df)) fac_all <- cbind(fac_all, fac_df)
   fit <- .assemble_fit("EFRM", Xv, est, id_vec, fac_all, n_groups, adjust_N,
                        notes, disc = rho_v)
+  fit$frame_group <- grp_name
 
   # --- structural tables -----------------------------------------------------------
   se_lp <- if (!is.null(boot)) apply(boot[, seq_len(G), drop = FALSE], 2, sd)
@@ -749,6 +759,10 @@ rasch_efrm <- function(data, item_sets, groups, id = NULL, factors = NULL,
                n_persons = npers, n_items = length(cols),
                alpha = unname(alpha[fr$set[j]]), phi = unname(phi[fr$group[j]]),
                rho = unname(alpha[fr$set[j]] * phi[fr$group[j]]),
+               # log alpha and log phi are estimated in different stages
+               # and their cross-stage covariance is not available: the
+               # combined SE treats them as uncorrelated, which the frames
+               # documentation states plainly
                se_log_rho = sqrt(
                  fit$alpha_table$se_log_alpha[match(fr$set[j], sets_u)]^2 +
                  fit$phi_table$se_log_phi[match(fr$group[j], glevs)]^2),

@@ -15,6 +15,7 @@ rasch_mfrm(
   adjust_N = NA,
   na_codes = -1,
   interaction = NULL,
+  factors = NULL,
   maxit = 60,
   tol = 1e-08
 )
@@ -58,6 +59,13 @@ equal one and the parameters are additive), but a significant
 interaction qualifies specific objectivity in practice: comparisons of
 the interacting facet's levels become item-dependent, which is itself
 the substantive finding.}
+
+\item{factors}{Optional person factors for DIF analysis: a character
+vector naming columns of \code{data} that are constant within person,
+or a data frame with one row per data row or per unique person. They
+are carried into the fit so \code{\link{dif_anova}} works on an MFRM
+fit directly. Facets are not person factors: facet DIF is an
+item-by-facet interaction (\code{interaction=}).}
 
 \item{maxit, tol}{Newton-Raphson iteration cap and convergence tolerance.}
 }

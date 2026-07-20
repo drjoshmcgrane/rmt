@@ -99,6 +99,12 @@
 #'   interaction qualifies specific objectivity in practice: comparisons of
 #'   the interacting facet's levels become item-dependent, which is itself
 #'   the substantive finding.
+#' @param factors Optional person factors for DIF analysis: a character
+#'   vector naming columns of \code{data} that are constant within person,
+#'   or a data frame with one row per data row or per unique person. They
+#'   are carried into the fit so \code{\link{dif_anova}} works on an MFRM
+#'   fit directly. Facets are not person factors: facet DIF is an
+#'   item-by-facet interaction (\code{interaction=}).
 #' @param maxit,tol Newton-Raphson iteration cap and convergence tolerance.
 #' @return An object of classes \code{"rasch_mfrm"} and \code{"rasch"}. In
 #'   addition to every component of a \code{\link{rasch}} fit (computed over
@@ -136,7 +142,7 @@
 rasch_mfrm <- function(data, person, item = NULL, score = NULL, facets,
                        items = NULL, n_groups = NULL,
                        adjust_N = NA, na_codes = -1, interaction = NULL,
-                       maxit = 60, tol = 1e-8) {
+                       factors = NULL, maxit = 60, tol = 1e-8) {
   # wide entry: item score columns are melted to the long form internally
   if (!is.null(items)) {
     if (!is.null(item) || !is.null(score))
@@ -281,8 +287,42 @@ rasch_mfrm <- function(data, person, item = NULL, score = NULL, facets,
               converged = sol$converged, m = m_v, anchors = NULL,
               n_parameters = P)
 
-  fit <- .assemble_fit("MFRM", Xv, est, persons_u, NULL, n_groups, adjust_N,
-                       notes)
+  # person factors for DIF: columns of `data` (constant within person) or a
+  # data frame keyed to the unique persons, carried through so dif_anova()
+  # works on an MFRM fit the way it does on any rasch fit. Facets are NOT
+  # person factors -- facet DIF is an item-by-facet interaction and belongs
+  # to `interaction=`.
+  fac_df <- NULL
+  if (!is.null(factors)) {
+    if (is.character(factors)) {
+      miss <- setdiff(factors, names(data))
+      if (length(miss))
+        stop("factor column(s) not found in the data: ",
+             paste(miss, collapse = ", "))
+      fac_df <- as.data.frame(lapply(factors, function(cn) {
+        v <- as.character(data[[cn]])
+        nvar <- tapply(v, pid, function(x) length(unique(x[!is.na(x)])))
+        if (any(nvar > 1L, na.rm = TRUE))
+          stop("factor '", cn, "' varies within person(s) ",
+               paste(names(nvar)[which(nvar > 1L)], collapse = ", "),
+               ": person factors must be constant per person (a facet ",
+               "is not a person factor; see `interaction=`)")
+        vv <- tapply(v, pid, function(x) x[!is.na(x)][1])
+        unname(vv[match(persons_u, names(vv))])
+      }), col.names = factors, stringsAsFactors = FALSE)
+      names(fac_df) <- factors
+    } else {
+      fac_df <- as.data.frame(factors, stringsAsFactors = FALSE)
+      if (nrow(fac_df) == length(pid)) {
+        fac_df <- fac_df[match(persons_u, pid), , drop = FALSE]
+      } else if (nrow(fac_df) != length(persons_u))
+        stop("`factors` needs one row per data row or one per unique ",
+             "person (", length(persons_u), ")")
+      rownames(fac_df) <- NULL
+    }
+  }
+  fit <- .assemble_fit("MFRM", Xv, est, persons_u, fac_df, n_groups,
+                       adjust_N, notes)
 
   # --- structural effects -----------------------------------------------------
   covb <- sol$cov_beta

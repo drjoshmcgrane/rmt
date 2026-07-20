@@ -463,3 +463,129 @@ test_that("significant multilevel within terms never reach ordinary Tukey", {
   # any Tukey rows present concern between terms only
   if (nrow(d$tukey)) expect_false(any(grepl("occ", d$tukey$term)))
 })
+
+# --- round 13: BTL / EFRM / MFRM DIF and identification -------------------
+
+test_that("btl_dif is order-invariant across correlated judge factors", {
+  skip_on_cran()
+  set.seed(31)
+  K <- 10; beta <- seq(-1.4, 1.4, length.out = K); nj <- 28; npj <- 60
+  g1 <- rep(c("a", "b"), c(10, 18))
+  g2 <- ifelse(runif(nj) < 0.75, ifelse(g1 == "a", "x", "y"),
+               sample(c("x", "y"), nj, TRUE))
+  jids <- sprintf("J%02d", 1:nj); rows <- list()
+  for (j in 1:nj) {
+    bj <- beta; if (g1[j] == "b") bj[4] <- bj[4] - 1
+    ia <- sample(K, npj, TRUE); ib <- (ia + sample(K - 1, npj, TRUE) - 1L) %% K + 1L
+    win <- rbinom(npj, 1, plogis(bj[ia] - bj[ib]))
+    rows[[j]] <- data.frame(object_a = paste0("O", ia),
+                            object_b = paste0("O", ib),
+                            winner = paste0("O", ifelse(win == 1, ia, ib)),
+                            judge = jids[j])
+  }
+  bt <- btl(do.call(rbind, rows), "object_a", "object_b", "winner",
+            judge = "judge")
+  A <- setNames(g1, jids); B <- setNames(g2, jids)
+  sAB <- btl_dif(bt, factors = list(A = A, B = B))$summary
+  sBA <- btl_dif(bt, factors = list(B = B, A = A))$summary
+  expect_equal(sAB$F_uniform[order(sAB$object, sAB$term)],
+               sBA$F_uniform[order(sBA$object, sBA$term)],
+               tolerance = 1e-8)
+})
+
+test_that("btl_dif rejects factors that vary within a judge", {
+  set.seed(3)
+  K <- 6; b <- seq(-1, 1, length.out = K); n <- 600
+  ia <- sample(K, n, TRUE); ib <- (ia + sample(K - 1, n, TRUE) - 1L) %% K + 1L
+  d <- data.frame(object_a = paste0("O", ia), object_b = paste0("O", ib),
+                  winner = paste0("O", ifelse(
+                    rbinom(n, 1, plogis(b[ia] - b[ib])) == 1, ia, ib)),
+                  judge = sample(sprintf("J%d", 1:10), n, TRUE))
+  bt <- btl(d, "object_a", "object_b", "winner", judge = "judge")
+  rowfac <- sample(c("u", "v"), n, TRUE)      # varies within judges
+  expect_error(btl_dif(bt, factors = list(g = rowfac)),
+               "varies within judge")
+})
+
+test_that("btl_efrm validates within-set connectivity and alpha identification", {
+  d <- simulate_btl_efrm(n_objects_per_set = 5, n_sets = 2, n_panels = 2,
+                         n_judges_per_panel = 6, reps_within = 20,
+                         reps_cross = 20, seed = 4)
+  os <- attr(d, "truth")$object_sets
+  ## alpha: cross-set rows touching only ONE object of set 2
+  s2 <- os[[2]]
+  cross_rows <- (d$object_a %in% os[[1]]) != (d$object_b %in% os[[1]])
+  keep <- !cross_rows | (d$object_a == s2[1]) | (d$object_b == s2[1])
+  expect_error(
+    btl_efrm(d[keep, ], "object_a", "object_b", "winner", "judge", "panel",
+             os, se_method = "conditional"),
+    "unit \\(alpha\\) is unidentified")
+  ## within-set connectivity: split set 1's internal comparisons
+  g1 <- os[[1]][1:2]; g2 <- os[[1]][3:5]
+  within1 <- (d$object_a %in% os[[1]]) & (d$object_b %in% os[[1]])
+  bridge <- within1 & ((d$object_a %in% g1) != (d$object_b %in% g1))
+  expect_error(
+    btl_efrm(d[!bridge, ], "object_a", "object_b", "winner", "judge",
+             "panel", os, se_method = "conditional"),
+    "not connected|no within-set comparison")
+})
+
+test_that("EFRM group linkage requires shared items, not shared set labels", {
+  d <- simulate_efrm(n_per_group = 300, items_per_set = 8, n_sets = 2,
+                     n_groups = 2, group_unit_ratio = 1.25, seed = 2)
+  tr <- attr(d, "truth")
+  ## make the groups' item subsets DISJOINT within every set
+  grp <- tr$groups
+  X <- d
+  items <- unlist(tr$item_sets)
+  for (s in tr$item_sets) {
+    half <- seq_len(floor(length(s) / 2))
+    X[grp == unique(grp)[1], s[half]] <- NA
+    X[grp == unique(grp)[2], s[-half]] <- NA
+  }
+  expect_error(
+    rasch_efrm(X, item_sets = tr$item_sets, groups = grp),
+    "not linked|unidentified")
+})
+
+test_that("dif_anova integrates with EFRM and MFRM fits", {
+  skip_on_cran()
+  d <- simulate_efrm(n_per_group = 300, items_per_set = 8, n_sets = 2,
+                     n_groups = 2, group_unit_ratio = 1.25, seed = 1)
+  tr <- attr(d, "truth")
+  expect_error(
+    dif_anova(rasch_efrm(d, item_sets = tr$item_sets, groups = tr$groups)),
+    "frame structure")
+  sex <- rep(c("m", "f"), length.out = nrow(d))
+  f2 <- rasch_efrm(d, item_sets = tr$item_sets, groups = tr$groups,
+                   factors = data.frame(sex = sex))
+  d2 <- dif_anova(f2)
+  expect_true(any(grepl("frame structure", d2$notes)))
+  expect_gt(nrow(d2$summary), 0)
+
+  set.seed(1)
+  simP <- function(th, tau) { x <- 0:length(tau)
+    p <- exp(x * th - c(0, cumsum(tau))); p / sum(p) }
+  persons <- sprintf("P%03d", 1:150); raters <- paste0("R", 1:3)
+  th <- setNames(rnorm(150, 0, 1.3), persons)
+  sx <- setNames(rep(c("m", "f"), length.out = 150), persons)
+  tau <- list(A = c(-1, 1), B = c(-0.5, 1.2), C = c(-1.2, 0.4))
+  dd <- expand.grid(person = persons, item = names(tau), rater = raters,
+                    stringsAsFactors = FALSE)
+  dd$score <- mapply(function(p, i, r)
+    sample(0:2, 1, prob = simP(th[p] + ifelse(i == "B" & sx[p] == "f",
+                                              -0.6, 0),
+                               tau[[i]] + c(R1 = -0.4, R2 = 0,
+                                            R3 = 0.4)[r])),
+    dd$person, dd$item, dd$rater)
+  dd$sex <- sx[dd$person]
+  mf <- rasch_mfrm(dd, person = "person", item = "item", score = "score",
+                   facets = "rater", factors = "sex")
+  dm <- dif_anova(mf)
+  expect_true(any(dm$summary$uniform_DIF[grepl("^B:", dm$summary$item)] %in%
+                    TRUE))
+  expect_error(
+    rasch_mfrm(dd, person = "person", item = "item", score = "score",
+               facets = "rater", factors = "rater"),
+    "varies within person")
+})

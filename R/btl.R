@@ -1410,6 +1410,17 @@ btl_dif <- function(fit, factors, objects = NULL,
       unname(as.character(g)[match(cm$judge, names(g))])
     }
   })
+  # judge-group DIF tests judge ATTRIBUTES: a row-wise factor that varies
+  # within a judge has no judge-level value, and the judge-level analysis
+  # would silently take whichever row came first
+  for (j in seq_along(gvs)) {
+    nvar <- tapply(gvs[[j]], cm$judge, function(v)
+      length(unique(v[!is.na(v)])))
+    if (any(nvar > 1L, na.rm = TRUE))
+      stop("factor '", fnames[j], "' varies within judge(s) ",
+           paste(names(nvar)[which(nvar > 1L)], collapse = ", "),
+           ": judge-group DIF needs judge-constant factors")
+  }
   ok <- Reduce(`&`, lapply(gvs, function(g) !is.na(g)))
   safe <- paste0("f", seq_along(fnames))            # syntactic stand-ins
   op <- if (effects == "factorial") " * " else " + "
@@ -1501,13 +1512,45 @@ btl_dif <- function(fit, factors, objects = NULL,
       min(tapply(as.character(ag$judge_unit), ag[[sn]],
                  function(x) length(unique(x)))) >= 2L, 0) >= 1)
     if (!nj_ok || length(unique(ag$judge_unit)) < 4L) next
-    rhs <- paste("(", paste(safe, collapse = op), ")",
-                 if (nb > 1L) "* band" else "")
-    form <- stats::as.formula(paste("z ~", rhs, "+ Error(judge_unit)"))
-    av <- tryCatch(suppressWarnings(stats::aov(form, data = ag)),
-                   error = function(e) NULL)
-    if (is.null(av)) next
-    ft <- .aov_terms_flat(av)
+    # the same order-invariant machinery as the person DIF ANOVA:
+    # between-judge terms by Type II sums of squares on band-centred judge
+    # margins (sequential aov let entry order decide which correlated
+    # judge factor flagged), band-crossing terms on the judge-by-band mean
+    # matrix through orthonormal contrasts with the Greenhouse-Geisser
+    # correction
+    rhs_terms <- attr(stats::terms(stats::as.formula(
+      paste("z ~ (", paste(safe, collapse = op), ")",
+            if (nb > 1L) "* band" else ""))), "term.labels")
+    bterms_o <- rhs_terms[!vapply(rhs_terms, function(tt)
+      "band" %in% .term_vars(tt), TRUE)]
+    wterms_o <- setdiff(rhs_terms, bterms_o)
+    if (nb > 1L) {
+      bmn <- tapply(ag$z, ag$band, mean)
+      zc <- ag$z - as.numeric(bmn[as.character(ag$band)])
+    } else zc <- ag$z
+    jk <- factor(ag$judge_unit)
+    pzj <- tapply(zc, jk, mean)
+    jfirst <- which(!duplicated(jk))
+    pdat_o <- ag[jfirst[match(levels(jk), as.character(jk[jfirst]))],
+                 c("judge_unit", safe), drop = FALSE]
+    pdat_o$z <- as.numeric(pzj)
+    ft_b <- .dif_type2(pdat_o, bterms_o)
+    ft_w <- NULL
+    if (nb > 1L && length(wterms_o)) {
+      Yw <- tapply(ag$z, list(jk, ag$band), mean)
+      compl <- rowSums(is.na(Yw)) == 0L
+      if (sum(compl) >= 6L) {
+        Yb <- Yw[compl, , drop = FALSE]
+        pd2 <- pdat_o[match(rownames(Yb),
+                            as.character(pdat_o$judge_unit)), ,
+                      drop = FALSE]
+        ft_w <- .dif_within_tests(Yb, pd2, "band",
+                                  list(band = ncol(Yw)), wterms_o,
+                                  bterms_o)
+      }
+    }
+    ft <- rbind(ft_b, ft_w)
+    if (is.null(ft)) next
     ft <- ft[ft$term != "Residuals" & is.finite(ft$F_value), , drop = FALSE]
     for (k in seq_len(nrow(ft)))
       term_rows[[length(term_rows) + 1L]] <- data.frame(

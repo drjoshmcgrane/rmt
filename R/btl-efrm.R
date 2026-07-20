@@ -611,6 +611,31 @@ btl_efrm <- function(data, object_a, object_b, winner, judge, panels,
            "' through cross-set pairs with at least min_link = ", min_link,
            " comparisons: ", paste(sets_u[comp != ref_comp], collapse = ", "),
            " (increase the cross-set data or lower min_link)")
+    # a set's UNIT alpha is identified by how its internal spread shows in
+    # cross-set outcomes: cross-set comparisons touching only one of its
+    # objects identify the origin kappa but leave alpha riding on nothing
+    for (s in sets_u[-1]) {
+      touched <- unique(c(a[cross][sa[cross] == s], b[cross][sb[cross] == s]))
+      if (length(touched) < 2L)
+        stop("cross-set comparisons touch only ", length(touched),
+             " object(s) of set '", s, "': its unit (alpha) is ",
+             "unidentified -- add cross-set comparisons involving at ",
+             "least two of its objects")
+    }
+  }
+  # within each set, the object comparison graph must be connected, or the
+  # relative locations inside the set are unidentified (the stage-1 Newton
+  # would land wherever the ridge sends it, exactly as in pcml())
+  for (s in sets_u) {
+    rows_s <- which(within & sa == s)
+    os_s <- sort(names(set_of)[set_of == s])
+    ia_s <- match(a[rows_s], os_s); ib_s <- match(b[rows_s], os_s)
+    comp_s <- .btlef_components(length(os_s), cbind(ia_s, ib_s))
+    if (length(unique(comp_s)) > 1L)
+      stop("the within-set comparison graph of set '", s, "' is not ",
+           "connected: relative locations are unidentified between {",
+           paste(tapply(os_s, comp_s, paste, collapse = ", "),
+                 collapse = "} and {"), "}")
   }
 
   # --- the staged conditional estimator, callable on any outcome vector -----

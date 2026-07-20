@@ -357,6 +357,20 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL,
   effects <- match.arg(effects)
   Z <- fit$residuals; L <- ncol(Z)
   factors <- .dif_factors(fit, factors)
+  # the EFRM frame group IS the frame structure: each frame has its own
+  # virtual items, so the group factor has a single level among any
+  # virtual item's responders and cannot be tested as DIF
+  drop_frame_note <- NULL
+  if (!is.null(fit$frame_group) && fit$frame_group %in% names(factors)) {
+    if (length(factors) == 1L)
+      stop("'", fit$frame_group, "' is the EFRM frame structure itself ",
+           "(each frame has its own virtual items), so it cannot be ",
+           "tested as DIF; nominate other person factors")
+    factors <- factors[names(factors) != fit$frame_group]
+    drop_frame_note <- paste0("frame group '", fit$frame_group,
+                              "' excluded: it is the frame structure, ",
+                              "not a testable DIF factor")
+  }
 
   # within-subject factors (levels repeating within a person) turn the
   # analysis into a mixed (split-plot) one: the class interval is taken at
@@ -625,7 +639,7 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL,
   # terms (interaction terms resolved by their cells)
   size_tab <- NULL
   if (isTRUE(sizes)) {
-    sz <- list()
+    sz <- list(); size_fail <- character(0)
     cand <- terms[terms$significant & !terms$superseded &
                   !vapply(terms$term, function(tt)
                     "ci" %in% .term_vars(tt), TRUE), , drop = FALSE]
@@ -634,15 +648,21 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL,
       # dif_size takes the nominated factor names, not the stand-ins
       by_user <- fnames[match(.term_vars(tt), safe)]
       ds <- tryCatch(dif_size(fit, it, by = by_user),
-                     error = function(e) NULL)
-      if (is.null(ds)) next
+                     error = function(e) e)
+      if (inherits(ds, "error")) {
+        size_fail <- c(size_fail, conditionMessage(ds))
+        next
+      }
       p <- ds$pairs
       sz[[length(sz) + 1L]] <- data.frame(item = it, term = tt, p,
                                           row.names = NULL)
     }
     size_tab <- if (length(sz)) do.call(rbind, sz) else
       data.frame(item = character(), term = character())
-  }
+    size_note <- if (length(size_fail)) paste0(
+      "DIF magnitudes unavailable for some flagged term(s): ",
+      paste(unique(size_fail), collapse = "; ")) else NULL
+  } else size_note <- NULL
 
   # compact reading: one row per item and group term, its own effect being
   # uniform DIF and its crossing with the class interval non-uniform DIF
@@ -683,6 +703,8 @@ dif_anova <- function(fit, factors = NULL, n_groups = NULL,
     size_tab$term <- relabel(size_tab$term)
 
   notes <- character(0)
+  if (!is.null(drop_frame_note)) notes <- c(notes, drop_frame_note)
+  if (!is.null(size_note)) notes <- c(notes, size_note)
   if (incomplete_note > 0L)
     notes <- c(notes, sprintf(
       "%d person-by-item panel(s) missing a within-subject cell were dropped from the within-person tests (their between-person information is retained)",
