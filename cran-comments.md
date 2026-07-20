@@ -1,4 +1,17 @@
-# CRAN comments for rasch 1.10.2
+# CRAN comments for rasch 1.11.2
+
+## Note on this submission
+
+This submission replaces rasch_1.10.2, currently awaiting review in the
+incoming queue: after that upload, an external code review found
+statistical errors in the package (a covariance not transformed to the
+recentred parameterisation on mixed max-score designs, a spurious
+discrimination factor in the Warm weighted-likelihood correction,
+degrees of freedom assigned to untestable items, drift tests ignoring
+the estimated equating shift, and a pseudo-replicating judge-group DIF
+test). Every finding was verified by simulation, fixed, and locked in
+by calibration tests; we would rather the reviewed and published first
+release be the corrected one. Apologies for the replacement.
 
 ## Summary
 
@@ -52,7 +65,7 @@ subtest, distractor(s), rescoring, scalogram).
 The full --as-cran check runs in about 4 minutes locally; the slowest
 example is under 2s. Heavy Monte-Carlo recovery and bootstrap-calibration
 tests are wrapped in skip_on_cran() (they run locally and on CI, where the
-suite is 1000+ assertions).
+suite is 1060+ assertions).
 
 ## External validation
 
