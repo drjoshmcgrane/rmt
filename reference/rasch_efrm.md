@@ -67,12 +67,14 @@ rasch_efrm(
   are descriptive, and inference is carried by the
   multi-degree-of-freedom Wald test per term in `phi_factorial_tests`.
   Group units are checked for identification on the joint information: a
-  flat direction along a unit, or a unit whose analytic standard error
-  exceeds 5 log-units (uncertain beyond a factor of about 150), is
-  refused with an error naming the group, since every common-unit
-  quantity would silently depend on it. Weakly identified units with
-  real threshold spread are kept, with standard errors that say how weak
-  they are.
+  flat direction along a unit (structural non-identification) is refused
+  with an error naming the group, since every common-unit quantity would
+  silently depend on it. A unit whose analytic standard error exceeds 5
+  log-units (uncertain beyond a factor of about 150) is practically
+  uninformative but not structurally unidentified: its estimate is kept
+  for sensitivity work, with a warning and a note. Weakly identified
+  units with real threshold spread are kept, with standard errors that
+  say how weak they are.
 
 - id, factors, items, n_groups, adjust_N, na_codes:
 

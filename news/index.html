@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.13.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.13.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -38,6 +38,16 @@
       <small>Source: <a href="https://github.com/drjoshmcgrane/rasch/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="1.13.3" id="rasch-1133">rasch 1.13.3<a class="anchor" aria-label="anchor" href="#rasch-1133"></a></h2>
+<p>Sixteenth review round: two identification edge cases beneath the 1.13.2 checks, and one policy refinement. Development branch only; the CRAN submission of 1.11.7 is untouched.</p>
+<ul><li>Connectivity now counts only INFORMATIVE response pairs. A pair whose every observed total is 0 or the maximum has a single feasible conditional allocation and carries no information, so one respondent scoring (0, 0) across two otherwise disjoint item blocks no longer “connects” them (every intermediate total has at least two allocations, so any response off the extreme-total corners is a real link). Applied to the item-pair graph of <code><a href="../reference/rasch.html">rasch()</a></code>/<code><a href="../reference/pcml.html">pcml()</a></code> and to the MFRM co-observation components.</li>
+<li>As the review prescribed, the graph test is now backed by a rank/conditioning check of the projected information at the solution in the shared solver. This also catches what no graph can see: a block bridged by a SINGLE informative response is perfect separation in the conditional pair logit – the pair estimate runs to the boundary and the information vanishes there – and previously returned converged fits with zero standard errors.</li>
+<li>The Ford (1957) check now respects anchors. Strong connectivity is the existence condition for the FREE model only; an anchored fit requires each free object to be tied to an anchor in both win directions (reachability to and from the anchor set over the points digraph – the constrained recession-direction condition). Two anchored components joined by a one-directional edge between their anchors is now correctly accepted, while removing one anchor still errors.</li>
+<li>EFRM: the practical weak-identification cutoff (SE of log phi above
+<ol start="5" style="list-style-type: decimal"><li>is now a loud warning plus a note with the estimates RETAINED, supporting reproducible sensitivity analyses; the error is reserved for structural non-identification (a flat direction of the joint information), where no estimate exists to retain.</li>
+</ol></li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="1.13.2" id="rasch-1132">rasch 1.13.2<a class="anchor" aria-label="anchor" href="#rasch-1132"></a></h2>
 <p>Fifteenth review round: the 1.13.1 identification guards were the right idea executed too weakly (or, in one case, too strongly), and this release replaces heuristics with information-based checks throughout. Development branch only; the CRAN submission of 1.11.7 is untouched.</p>

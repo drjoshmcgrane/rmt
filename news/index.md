@@ -1,5 +1,40 @@
 # Changelog
 
+## rasch 1.13.3
+
+Sixteenth review round: two identification edge cases beneath the 1.13.2
+checks, and one policy refinement. Development branch only; the CRAN
+submission of 1.11.7 is untouched.
+
+- Connectivity now counts only INFORMATIVE response pairs. A pair whose
+  every observed total is 0 or the maximum has a single feasible
+  conditional allocation and carries no information, so one respondent
+  scoring (0, 0) across two otherwise disjoint item blocks no longer
+  “connects” them (every intermediate total has at least two
+  allocations, so any response off the extreme-total corners is a real
+  link). Applied to the item-pair graph of
+  [`rasch()`](https://drjoshmcgrane.github.io/rasch/reference/rasch.md)/[`pcml()`](https://drjoshmcgrane.github.io/rasch/reference/pcml.md)
+  and to the MFRM co-observation components.
+- As the review prescribed, the graph test is now backed by a
+  rank/conditioning check of the projected information at the solution
+  in the shared solver. This also catches what no graph can see: a block
+  bridged by a SINGLE informative response is perfect separation in the
+  conditional pair logit – the pair estimate runs to the boundary and
+  the information vanishes there – and previously returned converged
+  fits with zero standard errors.
+- The Ford (1957) check now respects anchors. Strong connectivity is the
+  existence condition for the FREE model only; an anchored fit requires
+  each free object to be tied to an anchor in both win directions
+  (reachability to and from the anchor set over the points digraph – the
+  constrained recession-direction condition). Two anchored components
+  joined by a one-directional edge between their anchors is now
+  correctly accepted, while removing one anchor still errors.
+- EFRM: the practical weak-identification cutoff (SE of log phi above
+  5.  is now a loud warning plus a note with the estimates RETAINED,
+      supporting reproducible sensitivity analyses; the error is
+      reserved for structural non-identification (a flat direction of
+      the joint information), where no estimate exists to retain.
+
 ## rasch 1.13.2
 
 Fifteenth review round: the 1.13.1 identification guards were the right

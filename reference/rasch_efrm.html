@@ -35,7 +35,7 @@ diagnostic tables and plots apply."><meta property="og:image" content="https://d
 
     <a class="navbar-brand me-2" href="../index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.13.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.13.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -135,11 +135,14 @@ coefficient rows are descriptive, and inference is carried by the
 multi-degree-of-freedom Wald test per term in
 <code>phi_factorial_tests</code>. Group units are checked for
 identification on the joint information: a flat direction along a
-unit, or a unit whose analytic standard error exceeds 5 log-units
-(uncertain beyond a factor of about 150), is refused with an error
-naming the group, since every common-unit quantity would silently
-depend on it. Weakly identified units with real threshold spread are
-kept, with standard errors that say how weak they are.</p></dd>
+unit (structural non-identification) is refused with an error naming
+the group, since every common-unit quantity would silently depend on
+it. A unit whose analytic standard error exceeds 5 log-units
+(uncertain beyond a factor of about 150) is practically
+uninformative but not structurally unidentified: its estimate is
+kept for sensitivity work, with a warning and a note. Weakly
+identified units with real threshold spread are kept, with standard
+errors that say how weak they are.</p></dd>
 
 
 <dt id="arg-id-factors-items-n-groups-adjust-n-na-codes">id, factors, items, n_groups, adjust_N, na_codes<a class="anchor" aria-label="anchor" href="#arg-id-factors-items-n-groups-adjust-n-na-codes"></a></dt>

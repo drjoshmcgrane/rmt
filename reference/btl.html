@@ -17,7 +17,11 @@ subset of objects never concedes a point to the rest, the likelihood
 pushes the two clusters infinitely far apart, so the fit stops with an
 error naming the separated objects rather than presenting the
 optimiser's boundary values as measures – remove the separated
-cluster, or collect comparisons that cross the divide."><meta property="og:description" content="Estimates object locations from paired-comparison data by conditional
+cluster, or collect comparisons that cross the divide. Anchors relax
+this condition: an anchored object is pinned, so the fit only requires
+every free object to be tied to an anchor in both win directions
+(otherwise the constrained likelihood still recedes along the
+unanchored cluster, and the same error results)."><meta property="og:description" content="Estimates object locations from paired-comparison data by conditional
 maximum likelihood. The Bradley-Terry-Luce model is the conditional form
 of the dichotomous Rasch model – within an item pair, given one correct
 response, the Rasch probability that it was the easier item is exactly
@@ -35,7 +39,11 @@ subset of objects never concedes a point to the rest, the likelihood
 pushes the two clusters infinitely far apart, so the fit stops with an
 error naming the separated objects rather than presenting the
 optimiser's boundary values as measures – remove the separated
-cluster, or collect comparisons that cross the divide."><meta property="og:image" content="https://drjoshmcgrane.github.io/rasch/logo.svg"></head><body>
+cluster, or collect comparisons that cross the divide. Anchors relax
+this condition: an anchored object is pinned, so the fit only requires
+every free object to be tied to an anchor in both win directions
+(otherwise the constrained likelihood still recedes along the
+unanchored cluster, and the same error results)."><meta property="og:image" content="https://drjoshmcgrane.github.io/rasch/logo.svg"></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -43,7 +51,7 @@ cluster, or collect comparisons that cross the divide."><meta property="og:image
 
     <a class="navbar-brand me-2" href="../index.html">rasch</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.13.2</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">1.13.3</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -94,7 +102,11 @@ subset of objects never concedes a point to the rest, the likelihood
 pushes the two clusters infinitely far apart, so the fit stops with an
 error naming the separated objects rather than presenting the
 optimiser's boundary values as measures – remove the separated
-cluster, or collect comparisons that cross the divide.</p>
+cluster, or collect comparisons that cross the divide. Anchors relax
+this condition: an anchored object is pinned, so the fit only requires
+every free object to be tied to an anchor in both win directions
+(otherwise the constrained likelihood still recedes along the
+unanchored cluster, and the same error results).</p>
     </div>
 
     <div class="section level2">
