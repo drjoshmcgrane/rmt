@@ -318,8 +318,17 @@ btl_dimensionality <- function(fit, reps = 50L) {
     vapply(d_lp, function(dd) item_moments(dd, tau)$P, numeric(m + 1L))
   lead_ref <- vapply(seq_len(reps), function(r) {
     if (is.null(seq_sim)) {
-      resp <- if (m == 1L) stats::rbinom(length(d_lp), 1L, stats::plogis(d_lp))
-              else apply(Pcat, 2, function(p) sample.int(m + 1L, 1L, prob = p) - 1L)
+      # a count-weighted row stands for w comparisons: simulate the
+      # binomial (multinomial) SUM over those w and pass the mean response
+      # with weight w, so the reference carries variance w p(1-p) per row,
+      # not the w^2 p(1-p) of one weighted Bernoulli -- the overdispersed
+      # reference made the test conservative on aggregated data
+      resp <- if (m == 1L)
+        stats::rbinom(length(d_lp), as.integer(w), stats::plogis(d_lp)) / w
+      else vapply(seq_along(d_lp), function(r) {
+        cnt <- stats::rmultinom(1L, as.integer(w[r]), Pcat[, r])
+        sum((0:m) * cnt) / w[r]
+      }, 0)
       Rr <- .btl_resid_matrix(ia, ib, resp, w, m, K, beta)
     } else {
       resp <- seq_sim()

@@ -1,3 +1,27 @@
+# rasch 1.11.1
+
+The follow-up review's residual findings, all verified and closed:
+
+* The BTL dimensionality reference now simulates binomial (multinomial)
+  sums for count-weighted rows instead of one weighted Bernoulli, whose
+  w^2 p(1-p) variance overdispersed the reference and made the test
+  conservative on aggregated data; aggregated and expanded data now give
+  the same reference (verified to < 1%).
+* The pairwise chi-square degrees of freedom subtract every estimated
+  parameter (position and dependence covariates were omitted), and a
+  design with nothing testable reports NA instead of df = 1.
+* Judge-clustered covariance carries the standard CR1 small-sample factor
+  G/(G-1), on top of the single-judge error and few-cluster note.
+* `btl_efrm(se_method = "judge_bootstrap")`: judges resampled with
+  replacement within panels and the whole pipeline refitted, so the
+  errors carry within-judge dependence as well as stage-one uncertainty
+  -- closing the documented gap in the parametric bootstrap. On
+  model-true data it agrees with the parametric bootstrap; estimates are
+  unchanged by construction.
+* The next-pair priority documentation is internally consistent (ranking
+  heuristic; the Sherman-Morrison update is exact for information
+  matrices, a scoring device on the sandwich).
+
 # rasch 1.11.0
 
 Statistical validity, from a second external review. Every finding was

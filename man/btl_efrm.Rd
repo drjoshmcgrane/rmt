@@ -15,7 +15,7 @@ btl_efrm(
   response = NULL,
   ties = c("drop", "error"),
   min_link = 20,
-  se_method = c("bootstrap", "conditional"),
+  se_method = c("bootstrap", "judge_bootstrap", "conditional"),
   boot_reps = 60,
   maxit = 60,
   tol = 1e-08
@@ -49,7 +49,9 @@ winner data only. Supplying it raises an informative error.}
 supply to be used for linking; sets not reachable from the reference set
 through sufficient cross-set pairs raise an error.}
 
-\item{se_method}{\code{"bootstrap"} (the default): a parametric bootstrap
+\item{se_method}{\code{"bootstrap"} (the default): a parametric bootstrap;
+\code{"judge_bootstrap"}: judges resampled with replacement within
+panels, carrying within-judge dependence;
 of the ENTIRE two-stage pipeline -- winners resampled from the fitted
 probabilities, both stages refitted \code{boot_reps} times -- so the
 reported standard errors carry every source of sampling variability,
@@ -139,12 +141,16 @@ sandwich for stage one, inverse observed information for stage two,
 conditional on stage one) for quick inspection; its \code{alpha} and
 \code{kappa} errors understate, and the fit says so.
 
-Two honesty notes on the bootstrap. It is model-based: replicates are drawn
-as independent Bernoulli outcomes at the fitted probabilities, which is
-self-consistent (the model has no judge parameter) but does not carry
-extra-model dependence within judges; the conditional stage-one errors are
-judge-clustered and guard against exactly that, so when the two disagree
-materially the larger is the cautious choice. And a parameter that reaches
+Two honesty notes on the bootstrap. The default is model-based:
+replicates are drawn as independent Bernoulli outcomes at the fitted
+probabilities, which is self-consistent (the model has no judge
+parameter) but does not carry extra-model dependence within judges. When
+judges plausibly carry idiosyncratic preferences across their
+comparisons, use \code{se_method = "judge_bootstrap"}: judges are
+redrawn with replacement within each panel and the whole pipeline is
+refitted, so the errors carry both the stage-one uncertainty and the
+within-judge dependence (it needs enough judges per panel to resample
+stably; failed replicates are counted and reported). And a parameter that reaches
 its boundary in some replicates (a set unit driven to zero when a resampled
 within-set order flips against the cross-set evidence, the signature of a
 two-object set with a near-even internal pair) has no normal sampling

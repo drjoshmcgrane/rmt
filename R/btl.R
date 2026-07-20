@@ -788,7 +788,11 @@ plot_btl <- function(fit, band = 2.5) {
   if (is.null(jd)) Gm <- Gm / sqrt(w)
   H <- gh$H
   Hi <- solve(H)
-  covth <- Hi %*% crossprod(Gm) %*% Hi
+  # CR1 small-sample factor: with G clusters the empirical meat understates
+  # by ~G/(G-1); the correction is standard practice and matters exactly
+  # where few-cluster inference is already fragile (a note fires below 10)
+  cr1 <- if (!is.null(jd) && nc > 1L) nc / (nc - 1) else 1
+  covth <- Hi %*% (crossprod(Gm) * cr1) %*% Hi
   # composite-likelihood information ingredients: tr(H^-1 J) = tr(covth H)
   # is the effective parameter count of the Godambe penalty (Varin & Vidoni
   # 2005); abs() makes it sign-convention free (the eigenvalues of H^-1 J
@@ -908,8 +912,12 @@ plot_btl <- function(fit, band = 2.5) {
                       chisq = as.numeric(zp)^2)
   rownames(pairs) <- NULL
   used <- pairs$n >= 2
+  # df: informative pairs minus ALL estimated parameters (locations,
+  # thresholds, and any position/dependence covariates); when nothing
+  # testable remains the total is NA, not a manufactured df = 1
   total_chisq <- sum(pairs$chisq[used])
-  total_df <- max(sum(used) - nb - q, 1L)
+  total_df <- sum(used) - np
+  if (total_df < 1L) { total_chisq <- NA_real_; total_df <- NA_integer_ }
   osi <- .psi(objects$location, objects$se)
 
   # two categories ARE the dichotomous conditional model, so an m == 1 fit is

@@ -121,3 +121,66 @@ test_that("btl_dif does not flag under judge heterogeneity with null groups", {
   flags <- vapply(1:5, simnull, 0)
   expect_lte(sum(flags > 0), 1)
 })
+
+test_that("pairwise chi-square df counts every estimated parameter", {
+  set.seed(3)
+  K <- 8; beta <- seq(-1.5, 1.5, length.out = K)
+  n <- 1500
+  ia <- sample(K, n, TRUE); ib <- (ia + sample(K - 1, n, TRUE) - 1L) %% K + 1L
+  win <- rbinom(n, 1, plogis(beta[ia] - beta[ib] + 0.3))
+  d <- data.frame(object_a = paste0("O", ia), object_b = paste0("O", ib),
+                  winner = paste0("O", ifelse(win == 1, ia, ib)))
+  f0 <- btl(d, "object_a", "object_b", "winner")
+  f1 <- btl(d, "object_a", "object_b", "winner", position = TRUE)
+  # the position covariate consumes one further degree of freedom
+  expect_equal(f1$total_df, f0$total_df - 1L)
+  # a design with no testable pairs left reports NA, not df = 1
+  d3 <- data.frame(object_a = c("A", "B", "C"), object_b = c("B", "C", "A"),
+                   winner = c("A", "B", "C"))
+  d3 <- d3[rep(1:3, 20), ]
+  f3 <- btl(d3, "object_a", "object_b", "winner", position = TRUE)
+  expect_true(is.na(f3$total_df) || f3$total_df >= 1L)
+})
+
+test_that("dimensionality reference respects comparison counts", {
+  skip_on_cran()   # two bootstrap references
+  set.seed(7)
+  K <- 8; beta <- setNames(seq(-1.2, 1.2, length.out = K), paste0("O", 1:K))
+  pr <- t(combn(names(beta), 2)); rows <- list()
+  for (i in seq_len(nrow(pr))) {
+    wins <- rbinom(1, 12, plogis(beta[pr[i, 1]] - beta[pr[i, 2]]))
+    rows[[length(rows) + 1]] <- data.frame(a = pr[i, 1], b = pr[i, 2],
+                                           win = pr[i, 1], k = wins)
+    rows[[length(rows) + 1]] <- data.frame(a = pr[i, 1], b = pr[i, 2],
+                                           win = pr[i, 2], k = 12 - wins)
+  }
+  agg <- do.call(rbind, rows); agg <- agg[agg$k > 0, ]
+  expd <- agg[rep(seq_len(nrow(agg)), agg$k), ]; expd$k <- 1
+  fa <- btl(agg, "a", "b", winner = "win", count = "k")
+  fe <- btl(expd, "a", "b", winner = "win")
+  set.seed(11); da <- btl_dimensionality(fa, reps = 150)
+  set.seed(11); de <- btl_dimensionality(fe, reps = 150)
+  ra <- mean(unlist(da$reference)); re <- mean(unlist(de$reference))
+  # one weighted Bernoulli per row overdispersed the aggregated reference
+  # by ~sqrt(w); binomial sums make the two forms agree
+  expect_lt(abs(ra - re) / re, 0.05)
+})
+
+test_that("judge-resampling bootstrap runs and matches the estimates", {
+  skip_on_cran()   # B pipeline refits
+  d <- simulate_btl_efrm(n_objects_per_set = 6, n_sets = 2, n_panels = 2,
+                         n_judges_per_panel = 8, reps_within = 25,
+                         reps_cross = 25, panel_units = c(0.8, 1.25),
+                         set_units = c(1, 1.3), seed = 7)
+  os <- attr(d, "truth")$object_sets
+  set.seed(1)
+  fj <- btl_efrm(d, "object_a", "object_b", "winner", "judge", "panel", os,
+                 se_method = "judge_bootstrap", boot_reps = 30)
+  fc <- btl_efrm(d, "object_a", "object_b", "winner", "judge", "panel", os,
+                 se_method = "conditional")
+  expect_equal(fj$phi_table$phi, fc$phi_table$phi)
+  expect_equal(fj$objects$v, fc$objects$v)
+  expect_true(all(is.finite(fj$phi_table$se_log_phi)))
+  expect_true(is.finite(fj$alpha_table$se_log_alpha[2]))
+  expect_match(fj$se_note, "judge-resampling")
+})

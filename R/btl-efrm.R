@@ -378,12 +378,16 @@
 #' conditional on stage one) for quick inspection; its \code{alpha} and
 #' \code{kappa} errors understate, and the fit says so.
 #'
-#' Two honesty notes on the bootstrap. It is model-based: replicates are drawn
-#' as independent Bernoulli outcomes at the fitted probabilities, which is
-#' self-consistent (the model has no judge parameter) but does not carry
-#' extra-model dependence within judges; the conditional stage-one errors are
-#' judge-clustered and guard against exactly that, so when the two disagree
-#' materially the larger is the cautious choice. And a parameter that reaches
+#' Two honesty notes on the bootstrap. The default is model-based:
+#' replicates are drawn as independent Bernoulli outcomes at the fitted
+#' probabilities, which is self-consistent (the model has no judge
+#' parameter) but does not carry extra-model dependence within judges. When
+#' judges plausibly carry idiosyncratic preferences across their
+#' comparisons, use \code{se_method = "judge_bootstrap"}: judges are
+#' redrawn with replacement within each panel and the whole pipeline is
+#' refitted, so the errors carry both the stage-one uncertainty and the
+#' within-judge dependence (it needs enough judges per panel to resample
+#' stably; failed replicates are counted and reported). And a parameter that reaches
 #' its boundary in some replicates (a set unit driven to zero when a resampled
 #' within-set order flips against the cross-set evidence, the signature of a
 #' two-object set with a near-even internal pair) has no normal sampling
@@ -423,7 +427,9 @@
 #' @param min_link Minimum number of cross-set comparisons a set pair must
 #'   supply to be used for linking; sets not reachable from the reference set
 #'   through sufficient cross-set pairs raise an error.
-#' @param se_method \code{"bootstrap"} (the default): a parametric bootstrap
+#' @param se_method \code{"bootstrap"} (the default): a parametric bootstrap;
+#'   \code{"judge_bootstrap"}: judges resampled with replacement within
+#'   panels, carrying within-judge dependence;
 #'   of the ENTIRE two-stage pipeline -- winners resampled from the fitted
 #'   probabilities, both stages refitted \code{boot_reps} times -- so the
 #'   reported standard errors carry every source of sampling variability,
@@ -474,7 +480,8 @@
 btl_efrm <- function(data, object_a, object_b, winner, judge, panels,
                      object_sets, response = NULL,
                      ties = c("drop", "error"), min_link = 20,
-                     se_method = c("bootstrap", "conditional"),
+                     se_method = c("bootstrap", "judge_bootstrap",
+                                   "conditional"),
                      boot_reps = 60, maxit = 60, tol = 1e-8) {
   ties <- match.arg(ties)
   se_method <- match.arg(se_method)
@@ -719,6 +726,72 @@ btl_efrm <- function(data, object_a, object_b, winner, judge, panels,
   # the SEs then carry stage-one uncertainty into the linking, which the
   # conditional errors omit (and demonstrably understate)
   boot_fail <- 0L
+  if (se_method == "judge_bootstrap") {
+    # resample JUDGES with replacement within each panel (the panel design
+    # is fixed; judges are the sampling units), relabel the copies so
+    # clusters stay distinct, and rerun the whole pipeline on each
+    # resample: unlike the parametric bootstrap, this carries any
+    # extra-model dependence within a judge's comparisons
+    jd_rows <- split(seq_along(a), jd)
+    pan_of_judge <- vapply(jd_rows, function(r) pan[r[1]], "")
+    judges_by_panel <- split(names(jd_rows), pan_of_judge)
+    draws <- list()
+    for (bb in seq_len(boot_reps)) {
+      take <- unlist(lapply(judges_by_panel, function(js)
+        sample(js, length(js), replace = TRUE)), use.names = FALSE)
+      idx <- unlist(jd_rows[take], use.names = FALSE)
+      jd_new <- rep(paste0(take, "#", seq_along(take)),
+                    lengths(jd_rows[take]))
+      df_b <- data.frame(oa = a[idx], ob = b[idx],
+                         win = ifelse(y[idx] == 1L, a[idx], b[idx]),
+                         judge = jd_new, stringsAsFactors = FALSE)
+      pmap_b <- setNames(pan[idx][!duplicated(jd_new)], unique(jd_new))
+      fb <- tryCatch(suppressWarnings(
+        btl_efrm(df_b, "oa", "ob", "win", "judge", panels = pmap_b,
+                 object_sets = object_sets, ties = "drop",
+                 min_link = min_link, se_method = "conditional",
+                 maxit = maxit, tol = tol)), error = function(e) NULL)
+      if (is.null(fb) || !isTRUE(fb$converged)) { boot_fail <- boot_fail + 1L; next }
+      lphi_b <- log(fb$phi_table$phi)[match(panels_u, fb$phi_table$panel)]
+      la_b <- log(fb$alpha_table$alpha)[match(sets_u, fb$alpha_table$set)]
+      ka_b <- fb$kappa_table$kappa[match(sets_u, fb$kappa_table$set)]
+      bh_b <- fb$objects$beta_set[match(objs_all, fb$objects$object)]
+      v_b <- fb$objects$v[match(objs_all, fb$objects$object)]
+      if (anyNA(c(lphi_b, la_b, ka_b))) { boot_fail <- boot_fail + 1L; next }
+      draws[[length(draws) + 1L]] <- c(lphi_b, la_b, ka_b, bh_b, v_b)
+    }
+    if (length(draws) < max(20L, ceiling(boot_reps / 2)))
+      stop("judge bootstrap failed on ", boot_fail, " of ", boot_reps,
+           " replicates; too few judges per panel for stable resampling -- ",
+           "use se_method = 'bootstrap' or 'conditional'")
+    D <- do.call(rbind, draws)
+    colnames(D) <- c(paste0("log phi[", panels_u, "]"),
+                     paste0("log alpha[", sets_u, "]"),
+                     paste0("kappa[", sets_u, "]"),
+                     paste0("beta[", objs_all, "]"), paste0("v[", objs_all, "]"))
+    n_inf <- colSums(!is.finite(D))
+    sds <- rep(NA_real_, ncol(D))
+    ok_col <- n_inf == 0L
+    sds[ok_col] <- apply(D[, ok_col, drop = FALSE], 2, sd)
+    if (any(n_inf > 0L))
+      notes <- c(notes, paste0(
+        "bootstrap: ", paste(sprintf("%s reached the boundary in %d of %d replicates",
+                                     colnames(D)[n_inf > 0L], n_inf[n_inf > 0L],
+                                     length(draws)), collapse = "; "),
+        "; the parameter is weakly identified and its SE is reported as NA"))
+    nO <- length(objs_all)
+    se_log_phi <- setNames(sds[seq_len(G)], panels_u)
+    se_log_alpha <- setNames(sds[G + seq_len(S)], sets_u)
+    se_kappa <- setNames(sds[G + S + seq_len(S)], sets_u)
+    se_log_alpha[sets_u[1]] <- NA_real_
+    se_kappa[sets_u[1]] <- NA_real_
+    se_bhat <- setNames(sds[G + 2L * S + seq_len(nO)], objs_all)
+    se_v <- setNames(sds[G + 2L * S + nO + seq_len(nO)], objs_all)
+    if (boot_fail > 0)
+      notes <- c(notes, sprintf(
+        "judge bootstrap: %d of %d replicates failed and were skipped",
+        boot_fail, boot_reps))
+  }
   if (se_method == "bootstrap") {
     p_hat <- pmin(pmax(fit0$p_all, 1e-8), 1 - 1e-8)
     draws <- list()
@@ -835,8 +908,15 @@ btl_efrm <- function(data, object_a, object_b, winner, judge, panels,
               n_comparisons = length(a),
               converged = fit0$converged,
               se_method = se_method,
-              boot_reps = if (se_method == "bootstrap") boot_reps else NA_integer_,
-              se_note = if (se_method == "bootstrap")
+              boot_reps = if (se_method %in% c("bootstrap", "judge_bootstrap"))
+                boot_reps else NA_integer_,
+              se_note = if (se_method == "judge_bootstrap")
+                paste("standard errors from a judge-resampling bootstrap",
+                      "(judges redrawn with replacement within panels, the",
+                      "whole pipeline refitted): carries stage-one",
+                      "uncertainty AND any extra-model dependence within",
+                      "judges")
+              else if (se_method == "bootstrap")
                 paste("standard errors from a parametric bootstrap of the",
                       "whole two-stage pipeline: the staged conditional",
                       "estimates are unchanged, and their errors carry the",
@@ -859,7 +939,9 @@ print.rasch_btl_efrm <- function(x, ...) {
               x$n_comparisons))
   cat(sprintf("Two-stage conditional ML: %s; SEs %s\n",
               if (x$converged) "converged" else "NOT converged",
-              if (identical(x$se_method, "bootstrap"))
+              if (identical(x$se_method, "judge_bootstrap"))
+                sprintf("by judge-resampling bootstrap (B = %d)", x$boot_reps)
+              else if (identical(x$se_method, "bootstrap"))
                 sprintf("by parametric bootstrap (B = %d)", x$boot_reps)
               else "conditional (understate the linking uncertainty)"))
   if (nrow(x$alpha_table) == 1L)
