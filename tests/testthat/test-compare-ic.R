@@ -88,3 +88,29 @@ test_that("mixtures are refused; MFRM fits get NA ICs with the reason noted", {
   expect_true(all(is.na(cmp$cl_aic)))
   expect_match(attr(cmp, "note"), "MFRM/EFRM")
 })
+
+test_that("compare_fits withholds ICs for an unconverged fit", {
+  set.seed(50); N <- 300; L <- 5
+  d <- seq(-1.5, 1.5, length.out = L)
+  X <- matrix(rbinom(N * L, 1, plogis(outer(rnorm(N), d, "-"))), N, L)
+  colnames(X) <- paste0("I", 1:L)
+  good <- rasch(as.data.frame(X))
+  bad <- rasch(as.data.frame(X), maxit = 1L)     # forced non-convergence
+  expect_false(isTRUE(bad$est$converged))
+  cmp <- compare_fits(good = good, bad = bad)
+  expect_true("converged" %in% names(cmp))
+  expect_true(is.na(cmp$cl_aic[cmp$label == "bad"]))
+  expect_true(is.na(cmp$loglik[cmp$label == "bad"]))
+})
+
+test_that("compare_fits same_data compares actual responses", {
+  set.seed(51); N <- 300; L <- 5
+  d <- seq(-1.5, 1.5, length.out = L)
+  mk <- function(s) { set.seed(s)
+    X <- matrix(rbinom(N * L, 1, plogis(outer(rnorm(N), d, "-"))), N, L)
+    colnames(X) <- paste0("I", 1:L); rasch(as.data.frame(X)) }
+  f1 <- mk(1); f2 <- mk(2)      # same items/max/N, different responses
+  cmp <- compare_fits(a = f1, b = f2)
+  expect_false(cmp$same_data[cmp$label == "b"])
+  expect_true(is.na(cmp$two_delta_ll[cmp$label == "b"]))
+})

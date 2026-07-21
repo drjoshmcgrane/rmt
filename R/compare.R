@@ -120,25 +120,37 @@ compare_fits <- function(..., reference = 1) {
     stop("no such reference fit")
 
   if (all(is_btl)) {
-    sig <- function(f) list(objects = sort(f$objects$object),
-                            n = f$n_comparisons,
-                            judges = if (is.null(f$judges)) 0L
-                                     else nrow(f$judges))
+    # fingerprint the actual comparison outcomes, not just the object set
+    # and count, so genuinely different comparison data are not treated as
+    # the same for the two_delta_ll
+    sig <- function(f) {
+      cmp <- f$comparisons
+      resp <- if (is.null(cmp) || is.null(cmp$response)) 0 else cmp$response
+      crc <- if (is.null(cmp)) NA_real_ else
+        sum(seq_len(nrow(cmp)) *
+              (as.numeric(factor(cmp$object_a)) * 131 +
+               as.numeric(factor(cmp$object_b)) * 17 + resp + 1), na.rm = TRUE)
+      list(objects = sort(f$objects$object), n = f$n_comparisons,
+           judges = if (is.null(f$judges)) 0L else nrow(f$judges),
+           outcomes = crc)
+    }
     ref_sig <- sig(fits[[reference]])
     rows <- lapply(seq_along(fits), function(i) {
       f <- fits[[i]]
-      ic <- .cl_ic(f)
+      conv <- isTRUE(f$converged)
+      ic <- if (conv) .cl_ic(f)
+            else c(eff = NA_real_, aic = NA_real_, bic = NA_real_)
       dep <- if (is.null(f$dependence)) "" else
         paste0(" + ", paste(f$dependence$effect, collapse = " + "))
       data.frame(
-        label = labs[i],
+        label = labs[i], converged = conv,
         model = paste0("BTL (", if (max(f$m) > 1L)
           paste0("graded, ", f$thr_structure, " thresholds") else
             "dichotomous", dep, ")"),
         judges = if (is.null(f$judges)) NA_integer_ else nrow(f$judges),
         objects = nrow(f$objects), comparisons = f$n_comparisons,
         parameters = if (is.null(f$cl)) NA_integer_ else f$cl$n_parameters,
-        loglik = f$loglik,
+        loglik = if (conv) f$loglik else NA_real_,
         eff_params = unname(ic["eff"]), cl_aic = unname(ic["aic"]),
         cl_bic = unname(ic["bic"]),
         same_data = identical(sig(f), ref_sig),
@@ -147,18 +159,32 @@ compare_fits <- function(..., reference = 1) {
         OSI = f$osi$PSI)
     })
   } else {
+    # same_data must compare the ACTUAL responses, not just the item names,
+    # maximum scores, and person count: two different datasets sharing those
+    # margins would otherwise be declared the same data and get a spurious
+    # two_delta_ll. The full response matrix is the exact fingerprint.
     sig <- function(f) list(items = colnames(f$X), m = unname(f$m),
-                            n = nrow(f$X))
+                            n = nrow(f$X), X = unname(as.matrix(f$X)))
+    # underlying item count: MFRM/EFRM columns of X are virtual item-by-facet
+    # or item-by-group cells, not the real items
+    n_items <- function(f)
+      if (!is.null(f$item_effects)) nrow(f$item_effects)
+      else if (!is.null(f$item_arbitrary)) nrow(f$item_arbitrary)
+      else ncol(f$X)
     ref_sig <- sig(fits[[reference]])
     rows <- lapply(seq_along(fits), function(i) {
       f <- fits[[i]]
-      ic <- .cl_ic(f)
+      conv <- isTRUE(f$est$converged)
+      # an unconverged fit has no trustworthy log-likelihood or information:
+      # withhold its information criteria rather than rank on them
+      ic <- if (conv) .cl_ic(f)
+            else c(eff = NA_real_, aic = NA_real_, bic = NA_real_)
       data.frame(
-        label = labs[i], model = f$model,
-        persons = nrow(f$X), items = ncol(f$X),
+        label = labs[i], model = f$model, converged = conv,
+        persons = nrow(f$X), items = n_items(f),
         parameters = if (is.null(f$est$n_parameters)) NA_integer_
                      else f$est$n_parameters,
-        loglik = f$est$loglik,
+        loglik = if (conv) f$est$loglik else NA_real_,
         eff_params = unname(ic["eff"]), cl_aic = unname(ic["aic"]),
         cl_bic = unname(ic["bic"]),
         same_data = identical(sig(f), ref_sig),
@@ -171,7 +197,10 @@ compare_fits <- function(..., reference = 1) {
   }
   out <- do.call(rbind, rows)
   ref <- out[reference, ]
-  cmp <- out$same_data & seq_len(nrow(out)) != reference
+  # the descriptive two_delta_ll needs the same data AND two trustworthy
+  # (converged) log-likelihoods
+  cmp <- out$same_data & out$converged & isTRUE(ref$converged) &
+    seq_len(nrow(out)) != reference
   out$two_delta_ll[cmp] <- 2 * (out$loglik[cmp] - ref$loglik)
   out$delta_parameters[cmp] <- out$parameters[cmp] - ref$parameters
   rownames(out) <- NULL
